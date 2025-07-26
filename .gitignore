@@ -1,0 +1,5 @@
+# Ignore the large node_modules directory
+node_modules
+
+# Ignore the file with all our secret keys
+.env
