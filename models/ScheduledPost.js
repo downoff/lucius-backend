@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const scheduledPostSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     content: { type: String, required: true, maxLength: 280 },
@@ -8,6 +7,5 @@ const scheduledPostSchema = new mongoose.Schema({
     scheduledAt: { type: Date, required: true },
     postedAt: { type: Date }
 }, { timestamps: true });
-
 const ScheduledPost = mongoose.model('ScheduledPost', scheduledPostSchema);
 module.exports = ScheduledPost;

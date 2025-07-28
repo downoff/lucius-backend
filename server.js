@@ -1,6 +1,5 @@
 require('dotenv').config();
 
-// --- Package Imports ---
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -10,43 +9,60 @@ const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const OpenAI = require('openai');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-// --- Local Module Imports ---
 const authMiddleware = require('./middleware/auth');
 const User = require('./models/User');
 const ScheduledPost = require('./models/ScheduledPost');
 const Conversation = require('./models/Conversation');
 
-// --- Initializations ---
 const app = express();
 const port = 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// --- Middleware Setup ---
-app.use(cors({ origin: ["https://www.ailucius.com", "http://127.0.0.1:5500", "http://localhost:5500", "http://localhost:5173"] }));
-app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => { /* ... full webhook logic ... */ });
+// Middleware
+app.use(cors({ origin: ["https://www.ailucius.com", "http://127.0.0.1:5500", "http://localhost:5173", "http://localhost:5174"] }));
 app.use(express.json());
-app.use(session({ secret: 'a_very_secret_key', resave: false, saveUninitialized: true }));
+app.use(session({ secret: 'a_very_secret_key_for_lucius', resave: false, saveUninitialized: true }));
 app.use(passport.initialize());
 app.use(passport.session());
 
-// --- Database Connection ---
+// Database Connection
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('Successfully connected to MongoDB.'))
     .catch((err) => console.error('MongoDB connection error:', err));
 
-// --- Passport.js Config ---
+// Passport.js Config
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "https://lucius-ai.onrender.com/auth/google/callback"
+    callbackURL: "https://lucius-ai.onrender.com/auth/google/callback" // Your LIVE backend URL
   },
-  async (accessToken, refreshToken, profile, done) => { /* ... full Google strategy logic ... */ }
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+      let user = await User.findOne({ googleId: profile.id });
+      if (user) { return done(null, user); }
+      user = await User.findOne({ email: profile.emails[0].value });
+      if (user) {
+        user.googleId = profile.id;
+        user.name = user.name || profile.displayName;
+        await user.save();
+        return done(null, user);
+      } else {
+        const newUser = new User({
+          googleId: profile.id,
+          name: profile.displayName,
+          email: profile.emails[0].value,
+        });
+        await newUser.save();
+        return done(null, newUser);
+      }
+    } catch (error) {
+      return done(error, null);
+    }
+  }
 ));
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser((id, done) => { User.findById(id, (err, user) => done(err, user)); });
-
 
 // --- API ROUTES ---
 
@@ -59,68 +75,74 @@ app.get('/auth/google/callback', passport.authenticate('google', { failureRedire
 });
 
 // User Auth Routes
-app.post('/api/users/register', async (req, res) => { /* ... full register route ... */ });
-app.post('/api/users/login', async (req, res) => { /* ... full login route ... */ });
-app.get('/api/users/me', authMiddleware, async (req, res) => { /* ... full 'me' route ... */ });
+app.post('/api/users/register', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        let user = await User.findOne({ email });
+        if (user) { return res.status(400).json({ message: 'User with this email already exists.' }); }
+        user = new User({ email, password, name: email.split('@')[0] });
+        await user.save();
+        res.status(201).json({ message: 'User registered successfully!' });
+    } catch (error) {
+        console.error("Registration error:", error);
+        res.status(500).json({ message: 'Server error during registration.' });
+    }
+});
 
+app.post('/api/users/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const user = await User.findOne({ email });
+        if (!user || !user.password) { return res.status(400).json({ message: 'Invalid credentials' }); }
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) { return res.status(400).json({ message: 'Invalid credentials' }); }
+        const payload = { user: { id: user.id } };
+        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5h' }, (err, token) => {
+            if (err) throw err;
+            res.json({ token });
+        });
+    } catch (error) {
+        console.error("Login error:", error);
+        res.status(500).json({ message: 'Server error during login.' });
+    }
+});
 
-// V3: UPGRADED AI GENERATION ROUTE WITH REAL-TIME STREAMING
+app.get('/api/users/me', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).select('-password');
+        if (!user) { return res.status(404).json({ message: 'User not found.' }); }
+        res.json(user);
+    } catch (error) {
+        console.error("Get user error:", error);
+        res.status(500).json({ message: 'Server error.' });
+    }
+});
+
+// AI Generation Route
 app.post('/api/ai/generate', authMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
         if (!user) { return res.status(404).json({ message: "User not found." }); }
-        if (user.credits <= 0) { return res.status(402).json({ message: 'You have run out of credits.' });}
+        if (user.credits <= 0) { return res.status(402).json({ message: 'You have run out of credits.' }); }
 
         const { prompt } = req.body;
-
-        // Set headers for Server-Sent Events (SSE)
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.flushHeaders(); // Send headers immediately
-
-        const stream = await openai.chat.completions.create({
+        const completion = await openai.chat.completions.create({
             model: "gpt-4o",
             messages: [{ role: "user", content: prompt }],
-            stream: true, // Enable streaming from OpenAI
         });
-
-        let fullResponse = "";
-        for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || "";
-            fullResponse += content;
-            // Send each chunk of text to the frontend as it arrives
-            res.write(`data: ${JSON.stringify({ text: content })}\n\n`);
-        }
-
-        // After the stream is complete, save the conversation and subtract a credit
+        const text = completion.choices[0].message.content;
+        
         user.credits -= 1;
         await user.save();
         
-        const newConversation = new Conversation({
-            userId: user.id,
-            title: prompt.substring(0, 40) + "...",
-            messages: [
-                { role: 'user', content: prompt },
-                { role: 'model', content: fullResponse }
-            ]
-        });
-        await newConversation.save();
-        
-        console.log(`Stream completed and saved for user ${user.email}. Credits remaining: ${user.credits}`);
-        res.end(); // End the streaming connection
-
+        res.json({ text, remainingCredits: user.credits });
     } catch (error) {
-        console.error("Streaming API error:", error);
-        res.end(); // Ensure the connection is closed on error
+        console.error("AI Generation error:", error);
+        res.status(500).json({ message: 'An error occurred with the AI.' });
     }
 });
 
-
-// All other routes for image generation, scheduler, etc. would follow.
-
-
-// --- Start the Server ---
+// Start Server
 app.listen(port, () => {
     console.log(`Server listening at http://localhost:${port}`);
 });
