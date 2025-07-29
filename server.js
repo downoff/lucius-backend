@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+// --- Package Imports ---
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -9,29 +10,33 @@ const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const OpenAI = require('openai');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
+// --- Local Module Imports ---
 const authMiddleware = require('./middleware/auth');
 const User = require('./models/User');
 const ScheduledPost = require('./models/ScheduledPost');
 const Conversation = require('./models/Conversation');
 
+// --- Initializations ---
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Middleware
+// --- Middleware Setup ---
 app.use(cors({ origin: ["https://www.ailucius.com", "http://127.0.0.1:5500", "http://localhost:5173", "http://localhost:5174"] }));
+app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => { /* ... full webhook logic ... */ });
 app.use(express.json());
 app.use(session({ secret: 'a_very_secret_key_for_lucius', resave: false, saveUninitialized: true }));
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Database Connection
+// --- Database Connection ---
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('Successfully connected to MongoDB.'))
     .catch((err) => console.error('MongoDB connection error:', err));
 
-// Passport.js Config
+// --- Passport.js Config ---
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -63,6 +68,7 @@ passport.use(new GoogleStrategy({
 ));
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser((id, done) => { User.findById(id, (err, user) => done(err, user)); });
+
 
 // --- API ROUTES ---
 
@@ -118,7 +124,7 @@ app.get('/api/users/me', authMiddleware, async (req, res) => {
     }
 });
 
-// AI Generation Route
+// AI Text Generation Route
 app.post('/api/ai/generate', authMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
@@ -141,6 +147,39 @@ app.post('/api/ai/generate', authMiddleware, async (req, res) => {
         res.status(500).json({ message: 'An error occurred with the AI.' });
     }
 });
+
+// AI Image Generation Route
+app.post('/api/ai/generate-image', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user || !user.isPro) {
+            return res.status(403).json({ message: 'Image Generation is a Pro feature. Please upgrade your account.' });
+        }
+        
+        const imageCost = 10;
+        if (user.credits < imageCost) {
+            return res.status(402).json({ message: `Not enough credits. Image generation costs ${imageCost} credits.` });
+        }
+
+        const { prompt } = req.body;
+        const response = await openai.images.generate({
+            model: "dall-e-3",
+            prompt: prompt,
+            n: 1,
+            size: "1024x1024",
+        });
+        
+        const imageUrl = response.data[0].url;
+        user.credits -= imageCost;
+        await user.save();
+        
+        res.json({ imageUrl, remainingCredits: user.credits });
+    } catch (error) {
+        console.error("OpenAI Image Generation API error:", error);
+        res.status(500).json({ message: 'An error occurred while generating the image.' });
+    }
+});
+
 
 // Start Server
 app.listen(port, () => {
