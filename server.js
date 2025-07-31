@@ -21,50 +21,31 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 // ... (All existing Auth, AI, History, and Stripe routes - No Changes) ...
 
 
-// --- NEW: CONTINUE CONVERSATION ROUTE ---
-app.post('/api/ai/conversation/:id/continue', authMiddleware, async (req, res) => {
+// --- NEW: CENTRALIZED CONTENT HUB ROUTE ---
+app.get('/api/content-hub', authMiddleware, async (req, res) => {
     try {
-        const { prompt } = req.body;
-        const user = await User.findById(req.user.id);
+        // In the future, we can fetch images, carousels, etc. here as well.
+        // For now, we start with the core content: conversations.
+        const conversations = await Conversation.find({ userId: req.user.id })
+            .sort({ updatedAt: -1 }) // Sort by the most recently updated
+            .limit(50); // Limit to the last 50 items for performance
 
-        const conversation = await Conversation.findOne({ 
-            _id: req.params.id, 
-            userId: req.user.id 
-        });
-
-        if (!conversation) {
-            return res.status(404).json({ message: 'Conversation not found.' });
-        }
-
-        // Add the user's new prompt to the message history
-        conversation.messages.push({ role: 'user', content: prompt });
-
-        // Create the message history for the AI, including the brand voice
-        const messagesForAI = [
-            { role: "system", content: user.brandVoicePrompt },
-            ...conversation.messages.map(msg => ({ role: msg.role, content: msg.content }))
-        ];
-
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: messagesForAI,
-        });
-
-        const aiResponse = completion.choices[0].message.content;
-
-        // Add the AI's new response to the message history
-        conversation.messages.push({ role: 'model', content: aiResponse });
+        // We will format the data to be easily used by the frontend hub
+        const contentFeed = conversations.map(conv => ({
+            id: conv._id,
+            type: 'Conversation',
+            title: conv.title,
+            preview: conv.messages.length > 1 ? conv.messages[1].content.substring(0, 100) + '...' : '...',
+            updatedAt: conv.updatedAt,
+        }));
         
-        await conversation.save(); // Save the updated conversation
-
-        res.json(conversation); // Send the entire updated conversation back
+        res.json(contentFeed);
 
     } catch (error) {
-        console.error("Error continuing conversation:", error);
-        res.status(500).json({ message: 'Failed to continue conversation.' });
+        console.error("Error fetching content hub feed:", error);
+        res.status(500).json({ message: 'Error fetching your content feed.' });
     }
 });
-
 
 // Start Server
 app.listen(port, () => {
