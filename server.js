@@ -25,47 +25,55 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => { /* ... full webhook logic ... */ });
 app.use(cors({ origin: ["https://www.ailucius.com", "http://127.0.0.1:5500", "http://localhost:5173", "http://localhost:5174"] }));
 app.use(express.json());
-app.use(session({ secret: 'a_very_secret_key_for_lucius', resave: false, saveUninitialized: true }));
-app.use(passport.initialize());
-app.use(passport.session());
+// ... (Full Passport.js config and other middleware) ...
 mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connected')).catch(err => console.error(err));
-// ... (Full Passport.js config) ...
+
 
 // --- API ROUTES ---
-// ... (Auth, User, AI Generation, and Stripe routes) ...
+// ... (Auth, User, AI Generation, Carousel, Hashtag, History, and Stripe routes) ...
 
-// --- CHAT HISTORY ROUTE ---
-app.get('/api/ai/history', authMiddleware, async (req, res) => {
-    try {
-        const conversations = await Conversation.find({ userId: req.user.id }).sort({ createdAt: -1 });
-        res.json(conversations);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching history.' });
-    }
-});
 
-// --- NEW: FETCH SINGLE CONVERSATION ROUTE ---
-app.get('/api/ai/conversation/:id', authMiddleware, async (req, res) => {
+// --- NEW: AI WEEKLY PLANNER ROUTE ---
+app.post('/api/ai/generate-weekly-plan', authMiddleware, async (req, res) => {
     try {
-        const conversation = await Conversation.findOne({ 
-            _id: req.params.id, 
-            userId: req.user.id // Security check to ensure the user owns this conversation
+        const user = await User.findById(req.user.id);
+        if (!user) { return res.status(404).json({ message: "User not found." }); }
+
+        const planCost = 5; // This is a premium tool, costs 5 credits
+        if (!user.isPro && user.credits < planCost) {
+            return res.status(402).json({ message: `Not enough credits. The Weekly Planner costs ${planCost} credits.` });
+        }
+
+        const { topic, audience } = req.body;
+        const prompt = `
+            Act as an expert social media content strategist. My primary topic for the week is "${topic}". My target audience is "${audience}".
+            Create a strategic 7-day content plan. The goal is to build engagement and provide value.
+            The output must be a valid JSON object. The root object should have keys: "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday".
+            For each day, the value should be another object with two keys: "theme" (e.g., "Educational Post", "Behind the Scenes", "Question of the Day") and "idea" (a specific post idea for that day).
+            Example for one day: "monday": { "theme": "Motivational Monday", "idea": "Post a short, inspiring story related to the main topic." }
+        `;
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" }, // Enforce JSON output
         });
 
-        if (!conversation) {
-            return res.status(404).json({ message: 'Conversation not found.' });
+        const weeklyPlan = JSON.parse(completion.choices[0].message.content);
+
+        if (!user.isPro) {
+            user.credits -= planCost;
+            await user.save();
         }
-        
-        res.json(conversation);
+
+        res.json({ weeklyPlan, remainingCredits: user.credits });
 
     } catch (error) {
-        console.error("Error fetching single conversation:", error);
-        res.status(500).json({ message: 'Error fetching conversation.' });
+        console.error("Weekly Plan Generation Error:", error);
+        res.status(500).json({ message: "Failed to generate the weekly plan." });
     }
 });
 
-// --- STRIPE CUSTOMER PORTAL ROUTE ---
-// ... (Full customer portal logic) ...
 
 // Start Server
 app.listen(port, () => {
