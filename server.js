@@ -21,7 +21,7 @@ const port = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // --- Middleware, DB, and Passport Setup (No Changes) ---
-// Note: This is a summary. Your full code should be here.
+// This is a summary. Your full code should be here.
 app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => { /* ... full webhook logic ... */ });
 app.use(cors({ origin: ["https://www.ailucius.com", "http://127.0.0.1:5500", "http://localhost:5173", "http://localhost:5174"] }));
 app.use(express.json());
@@ -34,26 +34,38 @@ mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connecte
 // --- API ROUTES ---
 // ... (Auth, User, AI Generation, and Stripe routes) ...
 
-// --- NEW: CHAT HISTORY ROUTE ---
+// --- CHAT HISTORY ROUTE ---
 app.get('/api/ai/history', authMiddleware, async (req, res) => {
     try {
-        // Find all conversations in the database that belong to the logged-in user
-        // Sort them by the most recently created to show newest first
         const conversations = await Conversation.find({ userId: req.user.id }).sort({ createdAt: -1 });
-        
         res.json(conversations);
-
     } catch (error) {
-        console.error("Error fetching chat history:", error);
         res.status(500).json({ message: 'Error fetching history.' });
     }
 });
 
-// --- STRIPE CUSTOMER PORTAL ROUTE ---
-app.post('/create-customer-portal-session', authMiddleware, async (req, res) => {
-    // ... (Full customer portal logic) ...
+// --- NEW: FETCH SINGLE CONVERSATION ROUTE ---
+app.get('/api/ai/conversation/:id', authMiddleware, async (req, res) => {
+    try {
+        const conversation = await Conversation.findOne({ 
+            _id: req.params.id, 
+            userId: req.user.id // Security check to ensure the user owns this conversation
+        });
+
+        if (!conversation) {
+            return res.status(404).json({ message: 'Conversation not found.' });
+        }
+        
+        res.json(conversation);
+
+    } catch (error) {
+        console.error("Error fetching single conversation:", error);
+        res.status(500).json({ message: 'Error fetching conversation.' });
+    }
 });
 
+// --- STRIPE CUSTOMER PORTAL ROUTE ---
+// ... (Full customer portal logic) ...
 
 // Start Server
 app.listen(port, () => {
