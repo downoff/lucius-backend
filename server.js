@@ -24,7 +24,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// --- FINAL CORS Configuration ---
+// --- Final CORS Configuration ---
 const whitelist = [
     'https://www.ailucius.com', 
     'http://localhost:5173', 
@@ -43,7 +43,13 @@ app.use(cors(corsOptions));
 
 
 // --- Middleware, DB, and Passport Setup ---
-// ... (Your full setup code for Stripe Webhook, JSON, Session, Passport, etc.)
+app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => { /* ... full webhook logic ... */ });
+app.use(express.json());
+app.use(session({ secret: 'a_very_secret_key_for_lucius', resave: false, saveUninitialized: true }));
+app.use(passport.initialize());
+app.use(passport.session());
+mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connected')).catch(err => console.error(err));
+// ... (Full Passport.js config for Google and Twitter) ...
 
 // --- API ROUTES ---
 
@@ -59,6 +65,9 @@ const demoLimiter = rateLimit({
 app.post('/api/public/generate-demo', demoLimiter, async (req, res) => {
     try {
         const { prompt } = req.body;
+        if (!prompt) {
+            return res.status(400).json({ message: 'Prompt is required.' });
+        }
         const systemPrompt = "You are an expert social media marketer. Your writing style is witty and engaging.";
         const completion = await openai.chat.completions.create({
             model: "gpt-4o",
@@ -69,14 +78,17 @@ app.post('/api/public/generate-demo', demoLimiter, async (req, res) => {
         });
         res.json({ text: completion.choices[0].message.content });
     } catch (error) {
+        console.error("Public demo error:", error);
         res.status(500).json({ message: 'An error occurred with the AI.' });
     }
 });
 
-// ... (All your other private API routes for Auth, AI tools, History, Billing, etc.)
+
+// ... (All your other private API routes for Auth, AI tools, History, Billing, etc. must be here) ...
+
 
 // --- AUTOMATED PUBLISHING CRON JOB ---
-// ... (Full cron job logic)
+// ... (Full cron job logic) ...
 
 // Start Server
 app.listen(port, () => {
