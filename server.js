@@ -1,41 +1,85 @@
-// ... (all your existing requires for express, cors, passport, etc.)
-const rateLimit = require('express-rate-limit');
+require('dotenv').config();
 
-// ... (your existing app setup)
+// --- Core Packages ---
+const express = require('express');
+const cors = require('cors');
+const mongoose = require('mongoose');
+const session = require('express-session');
+const passport = require('passport');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
+const cron = require('node-cron');
+
+// --- Service-Specific Packages ---
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const TwitterStrategy = require('passport-twitter').Strategy;
+const OpenAI = require('openai');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { TwitterApi } = require('twitter-api-v2');
+const sgMail = require('@sendgrid/mail');
+const { nanoid } = require('nanoid');
+
+// --- Local Modules ---
+const authMiddleware = require('./middleware/auth');
+const User = require('./models/User');
+const ScheduledPost = require('./models/ScheduledPost');
+const Conversation = require('./models/Conversation');
+
+// --- App Initialization (CORRECT ORDER) ---
+const app = express();
+const port = process.env.PORT || 3000;
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+// --- CORS Configuration ---
+const whitelist = ['https://www.ailucius.com', 'http://localhost:5173', 'http://localhost:5174'];
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (whitelist.indexOf(origin) !== -1 || !origin) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  }
+};
+app.use(cors(corsOptions));
+
+// --- Core Middleware ---
+app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => { /* ... full webhook logic ... */ });
+app.use(express.json());
+app.use(session({ secret: 'a_very_secret_key_for_lucius', resave: false, saveUninitialized: true }));
+app.use(passport.initialize());
+app.use(passport.session());
+
+// --- Database Connection ---
+mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connected')).catch(err => console.error(err));
+
+// --- Passport.js Strategies ---
+// ... (Your full Passport.js config for Google and Twitter should be here) ...
 
 // --- PUBLIC API ROUTES ---
-const publicApiLimiter = rateLimit({ /* ... existing rate limit code ... */ });
-
-app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => { /* ... */ });
-app.post('/api/public/generate-hooks', publicApiLimiter, async (req, res) => { /* ... */ });
-app.post('/api/public/analyze-tone', publicApiLimiter, async (req, res) => { /* ... */ });
-
-// --- NEW: INSTAGRAM CAROUSEL STUNT ROUTE ---
-app.post('/api/public/generate-ig-carousel', publicApiLimiter, async (req, res) => {
-    try {
-        const { topic } = req.body;
-        if (!topic) {
-            return res.status(400).json({ message: 'Topic is required.' });
-        }
-        const prompt = `
-            Act as a world-class Instagram strategist responding to the new algorithm's focus on original content.
-            My topic is "${topic}".
-            Generate the complete text for a 5-slide, high-engagement Instagram carousel.
-            The output must be a valid JSON object with a single key, "carousel", which is an array of 5 objects.
-            Each object in the array must have two keys: "slide_title" and "slide_content".
-            Example for one slide: { "slide_title": "Slide 1: The Hook", "slide_content": "The shocking truth about..." }
-        `;
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-        });
-        const carouselData = JSON.parse(completion.choices[0].message.content);
-        res.json(carouselData);
-    } catch (error) {
-        console.error("IG Carousel Error:", error);
-        res.status(500).json({ message: "Failed to generate carousel content." });
-    }
+const publicApiLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    message: { message: 'You have reached the limit for our free tools. Please sign up for more.' }
 });
 
-// ... (all your existing private, protected API routes)
+app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => { /* ... full demo logic ... */ });
+app.post('/api/public/generate-hooks', publicApiLimiter, async (req, res) => { /* ... full hooks logic ... */ });
+app.post('/api/public/analyze-tone', publicApiLimiter, async (req, res) => { /* ... full tone analyzer logic ... */ });
+app.post('/api/public/generate-ig-carousel', publicApiLimiter, async (req, res) => { /* ... full carousel logic ... */ });
+
+// --- CONTACT FORM ROUTE ---
+app.post('/api/contact', async (req, res) => { /* ... full contact form logic ... */ });
+
+// --- PRIVATE (AUTHENTICATED) API ROUTES ---
+// ... (All your private routes for Auth, AI tools, History, Billing, Referrals, etc., should be here) ...
+
+// --- AUTOMATED ENGINES (CRON JOBS) ---
+// ... (Your full cron job logic for credit refills and post scheduling should be here) ...
+
+// --- Start Server ---
+app.listen(port, () => {
+    console.log(`Server listening at http://localhost:${port} or on Render`);
+});
