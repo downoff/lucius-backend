@@ -10,28 +10,11 @@ const userSchema = new mongoose.Schema({
     credits: { type: Number, default: 10 },
     stripeCustomerId: { type: String },
     brandVoicePrompt: { type: String, default: 'You are a helpful AI assistant.' },
-    
-    // NEW: Twitter Integration Fields
+    lastCreditRefill: { type: Date, default: Date.now }, // <-- NEW FIELD
     twitterId: { type: String },
     twitterUsername: { type: String },
     twitterAccessToken: { type: String },
     twitterAccessSecret: { type: String },
-
-    xAuth: { // This is likely deprecated now, we'll keep it for now but the above is the new standard
-        token: String,
-        tokenSecret: String,
-        isVerified: { type: Boolean, default: false }
-    }
 }, { timestamps: true });
 
 // ... rest of the file (password hashing middleware)
-userSchema.pre('save', async function(next) {
-    if (this.isModified('password') && this.password) {
-        const salt = await bcrypt.genSalt(10);
-        this.password = await bcrypt.hash(this.password, salt);
-    }
-    next();
-});
-
-const User = mongoose.model('User', userSchema);
-module.exports = User;

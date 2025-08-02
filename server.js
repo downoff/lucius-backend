@@ -1,96 +1,34 @@
-require('dotenv').config();
-
-const express = require('express');
-const cors = require('cors');
-const mongoose = require('mongoose');
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const TwitterStrategy = require('passport-twitter').Strategy;
-const OpenAI = require('openai');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+// ... (all your existing requires for express, cors, passport, etc.)
 const cron = require('node-cron');
-const { TwitterApi } = require('twitter-api-v2');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const session = require('express-session');
-const rateLimit = require('express-rate-limit');
 
-const authMiddleware = require('./middleware/auth');
-const User = require('./models/User');
-const ScheduledPost = require('./models/ScheduledPost');
-const Conversation = require('./models/Conversation');
+// ... (your existing app setup)
 
-const app = express();
-const port = process.env.PORT || 3000;
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// --- THE FREEMIUM ENGINE: AUTOMATED CREDIT REFILL CRON JOB ---
+// This will run once every day at midnight
+cron.schedule('0 0 * * *', async () => {
+    console.log('Running daily credit refill job...');
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-// --- Final CORS Configuration ---
-const whitelist = [
-    'https://www.ailucius.com', 
-    'http://localhost:5173', 
-    'http://localhost:5174',
-];
-const corsOptions = {
-  origin: function (origin, callback) {
-    if (whitelist.indexOf(origin) !== -1 || !origin) {
-      callback(null, true)
-    } else {
-      callback(new Error('Not allowed by CORS'))
-    }
-  }
-};
-app.use(cors(corsOptions));
-
-
-// --- Middleware, DB, and Passport Setup ---
-app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => { /* ... full webhook logic ... */ });
-app.use(express.json());
-app.use(session({ secret: 'a_very_secret_key_for_lucius', resave: false, saveUninitialized: true }));
-app.use(passport.initialize());
-app.use(passport.session());
-mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connected')).catch(err => console.error(err));
-// ... (Full Passport.js config for Google and Twitter) ...
-
-// --- API ROUTES ---
-
-// PUBLIC DEMO ROUTE WITH RATE LIMITING
-const demoLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 5,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { message: 'Too many requests from this IP, please try again later.' }
-});
-
-app.post('/api/public/generate-demo', demoLimiter, async (req, res) => {
     try {
-        const { prompt } = req.body;
-        if (!prompt) {
-            return res.status(400).json({ message: 'Prompt is required.' });
-        }
-        const systemPrompt = "You are an expert social media marketer. Your writing style is witty and engaging.";
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: prompt }
-            ],
+        const usersToRefill = await User.find({
+            isPro: false,
+            lastCreditRefill: { $lte: thirtyDaysAgo }
         });
-        res.json({ text: completion.choices[0].message.content });
+
+        if (usersToRefill.length > 0) {
+            console.log(`Found ${usersToRefill.length} free users to refill credits.`);
+            for (const user of usersToRefill) {
+                user.credits = 10; // Reset to the free tier amount
+                user.lastCreditRefill = new Date();
+                await user.save();
+            }
+        } else {
+            console.log('No users need a credit refill today.');
+        }
     } catch (error) {
-        console.error("Public demo error:", error);
-        res.status(500).json({ message: 'An error occurred with the AI.' });
+        console.error('Error during credit refill cron job:', error);
     }
 });
 
-
-// ... (All your other private API routes for Auth, AI tools, History, Billing, etc. must be here) ...
-
-
-// --- AUTOMATED PUBLISHING CRON JOB ---
-// ... (Full cron job logic) ...
-
-// Start Server
-app.listen(port, () => {
-    console.log(`Server listening at http://localhost:${port} or on Render`);
-});
+// ... (all your existing API routes and server start logic)
