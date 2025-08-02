@@ -1,45 +1,76 @@
-// ... (all your existing requires for express, cors, passport, etc.)
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const mongoose = require('mongoose');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const TwitterStrategy = require('passport-twitter').Strategy;
+const OpenAI = require('openai');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const cron = require('node-cron');
+const { TwitterApi } = require('twitter-api-v2');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const session = require('express-session');
 const rateLimit = require('express-rate-limit');
 
-// ... (your existing app setup)
+const authMiddleware = require('./middleware/auth');
+const User = require('./models/User');
+const ScheduledPost = require('./models/ScheduledPost');
+const Conversation = require('./models/Conversation');
+
+// This is the correct order: define 'app' before using it.
+const app = express();
+const port = process.env.PORT || 3000;
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// --- Final CORS Configuration ---
+const whitelist = [
+    'https://www.ailucius.com', 
+    'http://localhost:5173', 
+    'http://localhost:5174',
+];
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (whitelist.indexOf(origin) !== -1 || !origin) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  }
+};
+app.use(cors(corsOptions));
+
+
+// --- Middleware, DB, and Passport Setup ---
+app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => { /* ... full webhook logic ... */ });
+app.use(express.json());
+app.use(session({ secret: 'a_very_secret_key_for_lucius', resave: false, saveUninitialized: true }));
+app.use(passport.initialize());
+app.use(passport.session());
+mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connected')).catch(err => console.error(err));
+// ... (Full Passport.js config for Google and Twitter)
 
 // --- PUBLIC API ROUTES ---
 const publicApiLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 15, // Limit each IP to 15 requests per hour for all free tools
+    windowMs: 60 * 60 * 1000,
+    max: 20,
     message: { message: 'You have reached the limit for our free tools. Please try again later or sign up for more.' }
 });
 
 app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => { /* ... existing demo code ... */ });
 app.post('/api/public/generate-hooks', publicApiLimiter, async (req, res) => { /* ... existing hooks code ... */ });
+app.post('/api/public/analyze-tone', publicApiLimiter, async (req, res) => { /* ... existing tone analyzer code ... */ });
 
-// --- NEW: AI TONE ANALYZER ROUTE ---
-app.post('/api/public/analyze-tone', publicApiLimiter, async (req, res) => {
-    try {
-        const { text } = req.body;
-        if (!text) {
-            return res.status(400).json({ message: 'Text to analyze is required.' });
-        }
-        const prompt = `
-            Act as a world-class brand strategist. Analyze the following text and describe its brand voice.
-            The output must be a valid JSON object with a single key, "analysis".
-            The value of "analysis" should be an object with three keys:
-            - "tone_summary": A single, descriptive sentence summarizing the overall tone (e.g., "Professional, confident, and authoritative.").
-            - "keywords": An array of 5-7 keywords that describe the voice (e.g., ["Formal", "Data-driven", "Inspirational"]).
-            - "recommendation": A short recommendation for how this voice could be used effectively in social media.
-            The text to analyze is: "${text}"
-        `;
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-        });
-        const analysisData = JSON.parse(completion.choices[0].message.content);
-        res.json(analysisData);
-    } catch (error) {
-        console.error("Tone Analysis Error:", error);
-        res.status(500).json({ message: "Failed to analyze the text." });
-    }
+
+// --- PRIVATE API ROUTES ---
+// ... (All your existing private, protected API routes for Auth, AI tools, History, Billing, etc.)
+
+// --- AUTOMATED ENGINES ---
+// ... (Full cron job logic for credit refills and post scheduling)
+
+// Start Server
+app.listen(port, () => {
+    console.log(`Server listening at http://localhost:${port} or on Render`);
 });
-
-// ... (all your existing private, protected API routes)
