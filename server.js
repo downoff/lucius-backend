@@ -1,41 +1,41 @@
-// ... (all your existing requires)
-const { nanoid } = require('nanoid'); // Make sure this is imported if not already
+// ... (all your existing requires for express, cors, passport, etc.)
+const rateLimit = require('express-rate-limit');
 
-// ... (your existing app setup and middleware)
+// ... (your existing app setup)
 
-// --- UPGRADED USER REGISTRATION ROUTE ---
-app.post('/api/users/register', async (req, res) => {
+// --- PUBLIC API ROUTES ---
+const publicApiLimiter = rateLimit({ /* ... existing rate limit code ... */ });
+
+app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => { /* ... */ });
+app.post('/api/public/generate-hooks', publicApiLimiter, async (req, res) => { /* ... */ });
+app.post('/api/public/analyze-tone', publicApiLimiter, async (req, res) => { /* ... */ });
+
+// --- NEW: INSTAGRAM CAROUSEL STUNT ROUTE ---
+app.post('/api/public/generate-ig-carousel', publicApiLimiter, async (req, res) => {
     try {
-        const { email, password, referralCode } = req.body; // <-- New referralCode field
-        let user = await User.findOne({ email });
-        if (user) { return res.status(400).json({ message: 'User with this email already exists.' }); }
-
-        let referredByUser = null;
-        if (referralCode) {
-            referredByUser = await User.findOne({ referralCode });
+        const { topic } = req.body;
+        if (!topic) {
+            return res.status(400).json({ message: 'Topic is required.' });
         }
-
-        user = new User({ 
-            email, 
-            password, 
-            name: email.split('@')[0],
-            referredBy: referredByUser ? referredByUser._id : null
+        const prompt = `
+            Act as a world-class Instagram strategist responding to the new algorithm's focus on original content.
+            My topic is "${topic}".
+            Generate the complete text for a 5-slide, high-engagement Instagram carousel.
+            The output must be a valid JSON object with a single key, "carousel", which is an array of 5 objects.
+            Each object in the array must have two keys: "slide_title" and "slide_content".
+            Example for one slide: { "slide_title": "Slide 1: The Hook", "slide_content": "The shocking truth about..." }
+        `;
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
         });
-        await user.save();
-
-        // If a referrer was found, reward them!
-        if (referredByUser) {
-            referredByUser.referrals.push(user._id);
-            referredByUser.credits += 50; // The reward bonus
-            await referredByUser.save();
-            console.log(`User ${referredByUser.email} was rewarded for referring ${user.email}`);
-        }
-
-        res.status(201).json({ message: 'User registered successfully!' });
+        const carouselData = JSON.parse(completion.choices[0].message.content);
+        res.json(carouselData);
     } catch (error) {
-        console.error("Registration error:", error);
-        res.status(500).json({ message: 'Server error during registration.' });
+        console.error("IG Carousel Error:", error);
+        res.status(500).json({ message: "Failed to generate carousel content." });
     }
 });
 
-// ... (all your other existing API routes and server start logic)
+// ... (all your existing private, protected API routes)
