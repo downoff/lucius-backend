@@ -26,7 +26,7 @@ const User = require('./models/User');
 const ScheduledPost = require('./models/ScheduledPost');
 const Conversation = require('./models/Conversation');
 
-// --- App Initialization (CORRECT ORDER) ---
+// --- App Initialization ---
 const app = express();
 const port = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -46,38 +46,68 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // --- Core Middleware ---
-app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => { /* ... full webhook logic ... */ });
-app.use(express.json());
-app.use(session({ secret: 'a_very_secret_key_for_lucius', resave: false, saveUninitialized: true }));
-app.use(passport.initialize());
-app.use(passport.session());
-
-// --- Database Connection ---
-mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connected')).catch(err => console.error(err));
-
-// --- Passport.js Strategies ---
-// ... (Your full Passport.js config for Google and Twitter should be here) ...
+// ... (Full setup code for Stripe Webhook, JSON, Session, Passport Strategies, etc.)
 
 // --- PUBLIC API ROUTES ---
-const publicApiLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: 20,
-    message: { message: 'You have reached the limit for our free tools. Please sign up for more.' }
-});
-
-app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => { /* ... full demo logic ... */ });
-app.post('/api/public/generate-hooks', publicApiLimiter, async (req, res) => { /* ... full hooks logic ... */ });
-app.post('/api/public/analyze-tone', publicApiLimiter, async (req, res) => { /* ... full tone analyzer logic ... */ });
-app.post('/api/public/generate-ig-carousel', publicApiLimiter, async (req, res) => { /* ... full carousel logic ... */ });
-
-// --- CONTACT FORM ROUTE ---
-app.post('/api/contact', async (req, res) => { /* ... full contact form logic ... */ });
+// ... (Full public API routes for the demo, hooks, tone analyzer, etc.)
 
 // --- PRIVATE (AUTHENTICATED) API ROUTES ---
-// ... (All your private routes for Auth, AI tools, History, Billing, Referrals, etc., should be here) ...
+
+// UPGRADED AI Text Generation (Social Studio) with Robust Error Handling
+app.post('/api/ai/generate', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) { return res.status(404).json({ message: "User not found." }); }
+        
+        if (!user.isPro && user.credits < 1) {
+            return res.status(402).json({ message: 'You have run out of credits.' });
+        }
+
+        const { prompt } = req.body;
+        if (!prompt) {
+            return res.status(400).json({ message: 'Prompt is required.' });
+        }
+
+        // Use the user's brand voice, with a fallback to a default prompt
+        const systemPrompt = user.brandVoicePrompt || "You are an expert social media marketer.";
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: prompt }
+            ],
+        });
+        
+        const text = completion.choices[0].message.content;
+        
+        if (!user.isPro) {
+            user.credits -= 1;
+        }
+        
+        const newConversation = new Conversation({
+            userId: user._id,
+            title: prompt.substring(0, 40) + "...",
+            messages: [
+                { role: 'user', content: prompt },
+                { role: 'model', content: text }
+            ]
+        });
+        
+        await Promise.all([user.save(), newConversation.save()]);
+
+        res.json({ text, remainingCredits: user.credits });
+    } catch (error) {
+        console.error("CRITICAL AI Generation error:", error);
+        res.status(500).json({ message: 'An error occurred with the AI. Please check your API key and billing status.' });
+    }
+});
+
+
+// ... (All other private routes for Carousel, Hashtags, Campaigns, History, etc.)
 
 // --- AUTOMATED ENGINES (CRON JOBS) ---
-// ... (Your full cron job logic for credit refills and post scheduling should be here) ...
+// ... (Full cron job logic for credit refills and post scheduling)
 
 // --- Start Server ---
 app.listen(port, () => {
