@@ -32,17 +32,11 @@ const port = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-// --- THIS IS THE CRITICAL FIX: Final CORS Configuration ---
-const whitelist = [
-    'https://www.ailucius.com', 
-    'http://localhost:5173', 
-    'http://localhost:5174',
-];
+// --- Final CORS Configuration ---
+const whitelist = ['https://www.ailucius.com', 'http://localhost:5173', 'http://localhost:5174'];
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (whitelist.indexOf(origin) !== -1) {
+    if (!origin || whitelist.indexOf(origin) !== -1) {
       callback(null, true)
     } else {
       callback(new Error('Not allowed by CORS'))
@@ -50,7 +44,6 @@ const corsOptions = {
   }
 };
 app.use(cors(corsOptions));
-
 
 // --- Core Middleware ---
 app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => { /* ... full webhook logic ... */ });
@@ -66,10 +59,70 @@ mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connecte
 // ... (Your full Passport.js config for Google and Twitter should be here) ...
 
 // --- PUBLIC API ROUTES ---
-// ... (Your full public API routes for the demo, hooks, tone analyzer, etc.) ...
+const publicApiLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'You have reached the limit for our free tools. Please sign up for more.' }
+});
+
+app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => {
+    try {
+        const { prompt } = req.body;
+        if (!prompt) return res.status(400).json({ message: 'Prompt is required.' });
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "system", content: "You are an expert social media marketer." }, { role: "user", content: prompt }],
+        });
+        res.json({ text: completion.choices[0].message.content });
+    } catch (error) {
+        console.error("Public Demo Error:", error);
+        res.status(500).json({ message: 'An error occurred with the AI.' });
+    }
+});
+
+// ... (All your other public API routes for hooks, tone analyzer, etc.) ...
+
 
 // --- PRIVATE (AUTHENTICATED) API ROUTES ---
-// ... (All your private routes for Auth, AI tools, History, Billing, Referrals, etc., should be here) ...
+
+// Final AI Text Generation (Social Studio) with Robust Error Handling
+app.post('/api/ai/generate', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ message: "User not found." });
+        if (!user.isPro && user.credits < 1) return res.status(402).json({ message: 'You have run out of credits.' });
+
+        const { prompt } = req.body;
+        if (!prompt) return res.status(400).json({ message: 'Prompt is required.' });
+
+        const systemPrompt = user.brandVoicePrompt || "You are an expert social media marketer.";
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+        });
+        
+        const text = completion.choices[0].message.content;
+        
+        if (!user.isPro) user.credits -= 1;
+        
+        const newConversation = new Conversation({
+            userId: user._id,
+            title: prompt.substring(0, 40) + "...",
+            messages: [{ role: 'user', content: prompt }, { role: 'model', content: text }]
+        });
+        
+        await Promise.all([user.save(), newConversation.save()]);
+        res.json({ text, remainingCredits: user.credits });
+    } catch (error) {
+        console.error("CRITICAL AI Generation error:", error);
+        res.status(500).json({ message: 'An error occurred with the AI. Please check your API key and billing status.' });
+    }
+});
+
+// ... (All your other private routes for Carousel, Hashtags, Campaigns, History, Billing, etc.) ...
 
 // --- AUTOMATED ENGINES (CRON JOBS) ---
 // ... (Your full cron job logic for credit refills and post scheduling should be here) ...
