@@ -58,7 +58,18 @@ mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connecte
 // --- Passport.js Strategies ---
 // ... (Your full Passport.js config for Google and Twitter should be here) ...
 
-// --- PUBLIC API ROUTES (Rate Limiter defined BEFORE routes) ---
+// --- Bulletproof Timeout Engine ---
+const withTimeout = (promise, ms) => {
+    const timeout = new Promise((_, reject) => {
+        const id = setTimeout(() => {
+            clearTimeout(id);
+            reject(new Error(`AI request timed out after ${ms / 1000} seconds. Please try again.`));
+        }, ms);
+    });
+    return Promise.race([promise, timeout]);
+};
+
+// --- PUBLIC API ROUTES ---
 const publicApiLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
     max: 20,
@@ -67,19 +78,32 @@ const publicApiLimiter = rateLimit({
     message: { message: 'You have reached the limit for our free tools. Please sign up for more.' }
 });
 
-app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => { /* ... full demo logic ... */ });
-app.post('/api/public/generate-hooks', publicApiLimiter, async (req, res) => { /* ... full hooks logic ... */ });
-app.post('/api/public/analyze-tone', publicApiLimiter, async (req, res) => { /* ... full tone analyzer logic ... */ });
-app.post('/api/public/generate-ig-carousel', publicApiLimiter, async (req, res) => { /* ... full carousel logic ... */ });
+app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => {
+    try {
+        const { prompt } = req.body;
+        if (!prompt) return res.status(400).json({ message: 'Prompt is required.' });
+        
+        const completionPromise = openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "system", content: "You are an expert social media marketer." }, { role: "user", content: prompt }],
+        });
 
-// --- CONTACT FORM ROUTE ---
-app.post('/api/contact', async (req, res) => { /* ... full contact form logic ... */ });
+        const completion = await withTimeout(completionPromise, 30000); // 30-second timeout
+        
+        res.json({ text: completion.choices[0].message.content });
+    } catch (error) {
+        console.error("Public Demo Error:", error);
+        res.status(500).json({ message: error.message || 'An error occurred with the AI.' });
+    }
+});
+
+// ... (All your other public API routes) ...
 
 // --- PRIVATE (AUTHENTICATED) API ROUTES ---
-// ... (All your private routes for Auth, AI tools, History, Billing, Referrals, etc., should be here) ...
+// ... (All your private API routes) ...
 
 // --- AUTOMATED ENGINES (CRON JOBS) ---
-// ... (Your full cron job logic for credit refills and post scheduling should be here) ...
+// ... (Your full cron job logic) ...
 
 // --- Start Server ---
 app.listen(port, () => {
