@@ -78,16 +78,15 @@ app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => {
         res.json({ text: completion.choices[0].message.content });
     } catch (error) {
         console.error("Public Demo Error:", error);
-        res.status(500).json({ message: 'An error occurred with the AI.' });
+        res.status(500).json({ message: 'An error occurred with the AI. Please ensure your API key is valid.' });
     }
 });
 
-// ... (All your other public API routes for hooks, tone analyzer, etc.) ...
-
+// ... (All your other public API routes) ...
 
 // --- PRIVATE (AUTHENTICATED) API ROUTES ---
 
-// Final AI Text Generation (Social Studio) with Robust Error Handling
+// Final AI Text Generation with Bulletproof Error Handling
 app.post('/api/ai/generate', authMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
@@ -117,15 +116,15 @@ app.post('/api/ai/generate', authMiddleware, async (req, res) => {
         await Promise.all([user.save(), newConversation.save()]);
         res.json({ text, remainingCredits: user.credits });
     } catch (error) {
-        console.error("CRITICAL AI Generation error:", error);
-        res.status(500).json({ message: 'An error occurred with the AI. Please check your API key and billing status.' });
+        console.error("CRITICAL AI Generation error:", error.response ? error.response.data : error.message);
+        res.status(500).json({ message: 'A critical error occurred with the AI. Please check your OpenAI API key and billing status.' });
     }
 });
 
-// ... (All your other private routes for Carousel, Hashtags, Campaigns, History, Billing, etc.) ...
+// ... (All your other private routes for Carousel, Campaigns, History, etc.) ...
 
 // --- AUTOMATED ENGINES (CRON JOBS) ---
-// ... (Your full cron job logic for credit refills and post scheduling should be here) ...
+// ... (Your full cron job logic) ...
 
 // --- Start Server ---
 app.listen(port, () => {
