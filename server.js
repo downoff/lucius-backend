@@ -59,33 +59,40 @@ mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connecte
 // ... (Your full Passport.js config for Google and Twitter should be here) ...
 
 // --- PUBLIC API ROUTES ---
-// ... (Your full public API routes for the demo, hooks, tone analyzer, etc.) ...
+const publicApiLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'You have reached the limit for our free tools. Please sign up for more.' }
+});
+app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => { /* ... full demo logic ... */ });
+// ... (all other public routes)
 
-// --- PRIVATE (AUTHENTICATED) API ROUTES ---
-
-// AUTHENTICATION & USER MANAGEMENT
-app.post('/api/users/register', async (req, res) => { /* ... full registration logic with referral handling ... */ });
-app.post('/api/users/login', async (req, res) => { /* ... full login logic ... */ });
-app.get('/api/users/me', authMiddleware, async (req, res) => { /* ... full 'me' route logic ... */ });
-app.post('/api/users/brand-voice', authMiddleware, async (req, res) => { /* ... full brand voice logic ... */ });
-
-// --- NEW: ONBOARDING COMPLETE ROUTE ---
-app.post('/api/users/complete-onboarding', authMiddleware, async (req, res) => {
+// --- CONTACT FORM ROUTE ---
+app.post('/api/contact', async (req, res) => {
+    const { name, email, message } = req.body;
+    if (!name || !email || !message) {
+        return res.status(400).json({ message: 'All fields are required.' });
+    }
+    const content = `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`;
+    const msg = {
+        to: 'luciusaicompany@gmail.com', // <-- CHANGE THIS
+        from: 'contact@ailucius.com', // This MUST be a verified sender in SendGrid
+        subject: `New Message from Lucius AI Contact Form: ${name}`,
+        text: content,
+    };
     try {
-        const user = await User.findById(req.user.id);
-        if (!user) {
-            return res.status(404).json({ message: "User not found." });
-        }
-        user.hasOnboarded = true;
-        await user.save();
-        res.json({ message: 'Onboarding complete!' });
+        await sgMail.send(msg);
+        res.status(200).json({ message: 'Message sent successfully!' });
     } catch (error) {
-        console.error("Onboarding error:", error);
-        res.status(500).json({ message: 'Failed to complete onboarding.' });
+        console.error('SendGrid Error:', error.response ? error.response.body : error);
+        res.status(500).json({ message: 'Error sending message.' });
     }
 });
 
-// ... (All your other private routes for AI tools, History, Billing, etc.) ...
+// --- PRIVATE (AUTHENTICATED) API ROUTES ---
+// ... (All your private routes for Auth, AI tools, History, Billing, etc.) ...
 
 // --- AUTOMATED ENGINES (CRON JOBS) ---
 // ... (Your full cron job logic for credit refills and post scheduling) ...
