@@ -58,52 +58,37 @@ mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connecte
 // --- Passport.js Strategies ---
 // ... (Your full Passport.js config for Google and Twitter should be here) ...
 
-// --- Bulletproof Timeout Engine ---
-const withTimeout = (promise, ms) => {
-    const timeout = new Promise((_, reject) => {
-        const id = setTimeout(() => {
-            clearTimeout(id);
-            reject(new Error(`AI request timed out after ${ms / 1000} seconds. Please try again.`));
-        }, ms);
-    });
-    return Promise.race([promise, timeout]);
-};
-
 // --- PUBLIC API ROUTES ---
-const publicApiLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: 20,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { message: 'You have reached the limit for our free tools. Please sign up for more.' }
-});
+// ... (Your full public API routes for the demo, hooks, tone analyzer, etc.) ...
 
-app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => {
+// --- PRIVATE (AUTHENTICATED) API ROUTES ---
+
+// AUTHENTICATION & USER MANAGEMENT
+app.post('/api/users/register', async (req, res) => { /* ... full registration logic with referral handling ... */ });
+app.post('/api/users/login', async (req, res) => { /* ... full login logic ... */ });
+app.get('/api/users/me', authMiddleware, async (req, res) => { /* ... full 'me' route logic ... */ });
+app.post('/api/users/brand-voice', authMiddleware, async (req, res) => { /* ... full brand voice logic ... */ });
+
+// --- NEW: ONBOARDING COMPLETE ROUTE ---
+app.post('/api/users/complete-onboarding', authMiddleware, async (req, res) => {
     try {
-        const { prompt } = req.body;
-        if (!prompt) return res.status(400).json({ message: 'Prompt is required.' });
-        
-        const completionPromise = openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [{ role: "system", content: "You are an expert social media marketer." }, { role: "user", content: prompt }],
-        });
-
-        const completion = await withTimeout(completionPromise, 30000); // 30-second timeout
-        
-        res.json({ text: completion.choices[0].message.content });
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found." });
+        }
+        user.hasOnboarded = true;
+        await user.save();
+        res.json({ message: 'Onboarding complete!' });
     } catch (error) {
-        console.error("Public Demo Error:", error);
-        res.status(500).json({ message: error.message || 'An error occurred with the AI.' });
+        console.error("Onboarding error:", error);
+        res.status(500).json({ message: 'Failed to complete onboarding.' });
     }
 });
 
-// ... (All your other public API routes) ...
-
-// --- PRIVATE (AUTHENTICATED) API ROUTES ---
-// ... (All your private API routes) ...
+// ... (All your other private routes for AI tools, History, Billing, etc.) ...
 
 // --- AUTOMATED ENGINES (CRON JOBS) ---
-// ... (Your full cron job logic) ...
+// ... (Your full cron job logic for credit refills and post scheduling) ...
 
 // --- Start Server ---
 app.listen(port, () => {
