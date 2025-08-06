@@ -1,13 +1,36 @@
 require('dotenv').config();
 
-// --- Core Packages & Modules ---
+// --- Core Packages ---
 const express = require('express');
-// ... (all your other packages and module imports)
+const cors = require('cors');
+const mongoose = require('mongoose'); // <-- The missing line is here
+const session = require('express-session');
+const passport = require('passport');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
+const cron = require('node-cron');
+
+// --- Service-Specific Packages ---
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const TwitterStrategy = require('passport-twitter').Strategy;
+const OpenAI = require('openai');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { TwitterApi } = require('twitter-api-v2');
+const sgMail = require('@sendgrid/mail');
+const { nanoid } = require('nanoid');
+
+// --- Local Modules ---
+const authMiddleware = require('./middleware/auth');
+const User = require('./models/User');
+const ScheduledPost = require('./models/ScheduledPost');
+const Conversation = require('./models/Conversation');
 
 // --- App Initialization ---
 const app = express();
 const port = process.env.PORT || 3000;
-// ... (all other initializations)
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // --- CORS Configuration & Core Middleware ---
 // ... (Your full CORS and middleware setup)
@@ -15,11 +38,12 @@ const port = process.env.PORT || 3000;
 // --- Database Connection ---
 mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connected')).catch(err => console.error(err));
 
-// --- THIS IS THE CRITICAL FIX: The Health Check Route ---
-// This must be one of the first routes defined.
+
+// --- Health Check Route ---
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', message: 'Lucius AI backend is healthy.' });
 });
+
 
 // --- Passport.js Strategies ---
 // ... (Your full Passport.js config for Google and Twitter)
