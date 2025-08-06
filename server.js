@@ -1,107 +1,83 @@
 require('dotenv').config();
 
-// --- Core Packages & Modules ---
+// --- Core Packages ---
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-// ... all other necessary packages and modules
+const session = require('express-session');
+const passport = require('passport');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
+const cron = require('node-cron');
+
+// --- Service-Specific Packages ---
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const TwitterStrategy = require('passport-twitter').Strategy;
+const OpenAI = require('openai'); // <-- This is the crucial line
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { TwitterApi } = require('twitter-api-v2');
+const sgMail = require('@sendgrid/mail');
+const { nanoid } = require('nanoid');
+
+// --- Local Modules ---
+const authMiddleware = require('./middleware/auth');
+const User = require('./models/User');
+const ScheduledPost = require('./models/ScheduledPost');
+const Conversation = require('./models/Conversation');
 
 // --- App Initialization ---
 const app = express();
 const port = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-// --- Final CORS & Middleware Setup ---
-// ... (Your full, final CORS and middleware configuration)
+// --- CORS Configuration & Core Middleware ---
+const whitelist = ['https://www.ailucius.com', 'http://localhost:5173', 'http://localhost:5174'];
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || whitelist.indexOf(origin) !== -1) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  }
+};
+app.use(cors(corsOptions));
+app.use(express.json());
+app.use(session({ secret: 'a_very_secret_key_for_lucius', resave: false, saveUninitialized: true }));
+app.use(passport.initialize());
+app.use(passport.session());
 
-// --- Database Connection & Health Check ---
+// --- Database Connection ---
 mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connected')).catch(err => console.error(err));
-app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
-// --- Passport.js & Other Setup ---
-// ... (Your full Passport.js configuration)
+// --- Health Check Route ---
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', message: 'Lucius AI backend is healthy.' });
+});
 
+// --- Passport.js Strategies ---
+// (Your full Passport.js config for Google and Twitter should be here)
 
-// --- FINAL, WORLD-CLASS STREAMING ROUTES ---
-
-// Public Demo Route (Streaming)
+// --- PUBLIC API ROUTES ---
+const publicApiLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'You have reached the limit for our free tools. Please sign up for more.' }
+});
 app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => {
-    try {
-        const { prompt } = req.body;
-        if (!prompt) return res.status(400).end();
-
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        
-        const stream = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [{ role: "system", content: "You are an expert social media marketer." }, { role: "user", content: prompt }],
-            stream: true,
-        });
-
-        for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || "";
-            if (content) {
-                res.write(`data: ${JSON.stringify({ text: content })}\n\n`);
-            }
-        }
-        res.write(`data: ${JSON.stringify({ event: 'close' })}\n\n`);
-
-    } catch (error) {
-        console.error("Streaming Demo Error:", error);
-        res.write(`data: ${JSON.stringify({ error: "An error occurred with the AI." })}\n\n`);
-    }
+    // ... full demo logic
 });
+// (all other public routes)
 
-// Private Generation Route (Streaming)
-app.post('/api/ai/generate', authMiddleware, async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id);
-        if (!user) return res.status(404).end();
-        if (!user.isPro && user.credits < 1) return res.status(402).json({ error: 'You have run out of credits.' });
+// --- PRIVATE (AUTHENTICATED) API ROUTES ---
+// (all your private routes)
 
-        const { prompt } = req.body;
-        if (!prompt) return res.status(400).end();
-
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-
-        const systemPrompt = user.brandVoicePrompt || "You are an expert social media marketer.";
-        
-        const stream = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
-            stream: true,
-        });
-
-        let fullResponse = "";
-        for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || "";
-            if (content) {
-                fullResponse += content;
-                res.write(`data: ${JSON.stringify({ text: content })}\n\n`);
-            }
-        }
-        
-        if (!user.isPro) user.credits -= 1;
-        const newConversation = new Conversation({
-            userId: user._id,
-            title: prompt.substring(0, 40) + "...",
-            messages: [{ role: 'user', content: prompt }, { role: 'model', content: fullResponse }]
-        });
-        await Promise.all([user.save(), newConversation.save()]);
-        
-        res.write(`data: ${JSON.stringify({ event: 'close' })}\n\n`);
-
-    } catch (error) {
-        console.error("Streaming AI Error:", error);
-        res.write(`data: ${JSON.stringify({ error: "A critical error occurred." })}\n\n`);
-    }
-});
-
-// ... (All your other non-streaming routes: auth, billing, history, etc.)
+// --- AUTOMATED ENGINES (CRON JOBS) ---
+// (Your full cron job logic for credit refills and post scheduling)
 
 // --- Start Server ---
 app.listen(port, () => {
