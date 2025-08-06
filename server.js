@@ -1,87 +1,75 @@
 require('dotenv').config();
 
-// --- Core Packages ---
+// --- Core Packages & Modules ---
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const session = require('express-session');
-const passport = require('passport');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const rateLimit = require('express-rate-limit');
-const cron = require('node-cron');
-const MongoStore = require('connect-mongo');
-
-// --- Service-Specific Packages ---
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const TwitterStrategy = require('passport-twitter').Strategy;
-const OpenAI = require('openai');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { TwitterApi } = require('twitter-api-v2');
-const sgMail = require('@sendgrid/mail');
-const { nanoid } = require('nanoid');
+// ... all other necessary packages and modules
 
 // --- Local Modules ---
 const authMiddleware = require('./middleware/auth');
 const User = require('./models/User');
-const ScheduledPost = require('./models/ScheduledPost');
 const Conversation = require('./models/Conversation');
+const Canvas = require('./models/Canvas'); // <-- NEW
 
-// --- App Initialization ---
+// --- App Initialization & Middleware ---
 const app = express();
 const port = process.env.PORT || 3000;
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+// ... (Your full CORS, JSON, Session, and Passport setup)
 
-// --- CORS Configuration ---
-const whitelist = ['https://www.ailucius.com', 'http://localhost:5173', 'http://localhost:5174'];
-const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || whitelist.indexOf(origin) !== -1) {
-      callback(null, true)
-    } else {
-      callback(new Error('Not allowed by CORS'))
-    }
-  }
-};
-app.use(cors(corsOptions));
-app.use(express.json());
+// --- Database Connection & Health Check ---
+mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connected')).catch(err => console.error(err));
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
-// --- Health Check Route ---
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok' });
-});
 
-// --- PUBLIC API ROUTES ---
-const publicApiLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: 20,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { message: 'You have reached the limit for our free tools.' }
-});
+// --- PRIVATE (AUTHENTICATED) API ROUTES ---
 
-// THIS IS THE CORRECT POST ROUTE
-app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => {
+// ... (All your existing private routes for AI tools, users, billing, etc.)
+
+// --- NEW: LUCIUS CANVAS API ROUTES ---
+
+// Get (or create) the user's canvas
+app.get('/api/canvas', authMiddleware, async (req, res) => {
     try {
-        const { prompt } = req.body;
-        if (!prompt) return res.status(400).json({ message: 'Prompt is required.' });
+        let canvas = await Canvas.findOne({ userId: req.user.id });
 
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [{ role: "system", content: "You are an expert social media marketer." }, { role: "user", content: prompt }],
-        });
-        
-        res.json({ text: completion.choices[0].message.content });
+        // If a user doesn't have a canvas yet, create one for them
+        if (!canvas) {
+            canvas = new Canvas({
+                userId: req.user.id,
+                columns: [
+                    { name: 'Raw Ideas', cards: [] },
+                    { name: 'Drafting', cards: [] },
+                    { name: 'Ready to Schedule', cards: [] }
+                ]
+            });
+            await canvas.save();
+        }
+        res.json(canvas);
     } catch (error) {
-        console.error("Public Demo Error:", error);
-        res.status(500).json({ message: 'An error occurred with the AI.' });
+        console.error("Error fetching canvas:", error);
+        res.status(500).json({ message: 'Failed to get your content canvas.' });
     }
 });
 
-// ... (Your other routes: hooks, tone-analyzer, etc.)
-
-// --- Start Server ---
-app.listen(port, () => {
-    console.log(`Server listening at http://localhost:${port}`);
+// Update the entire canvas (for drag-and-drop)
+app.post('/api/canvas/update', authMiddleware, async (req, res) => {
+    try {
+        const { columns } = req.body;
+        const canvas = await Canvas.findOneAndUpdate(
+            { userId: req.user.id },
+            { columns: columns },
+            { new: true } // Return the updated document
+        );
+        if (!canvas) {
+            return res.status(404).json({ message: 'Canvas not found.' });
+        }
+        res.json(canvas);
+    } catch (error) {
+        console.error("Error updating canvas:", error);
+        res.status(500).json({ message: 'Failed to update your canvas.' });
+    }
 });
+
+
+// ... (All your other routes and server start logic)
