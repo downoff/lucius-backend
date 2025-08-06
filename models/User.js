@@ -21,7 +21,11 @@ const userSchema = new mongoose.Schema({
     credits: { type: Number, default: 10 },
     brandVoicePrompt: { type: String, default: 'You are a helpful AI assistant.' },
     lastCreditRefill: { type: Date, default: Date.now },
-    hasOnboarded: { type: Boolean, default: false }, // <-- The new field
+    hasOnboarded: { type: Boolean, default: false },
+
+    // Email Verification
+    emailVerificationToken: String,
+    emailVerified: { type: Boolean, default: false },
 
     // Viral Referral Engine
     referralCode: { type: String, unique: true, default: () => nanoid(8) },
