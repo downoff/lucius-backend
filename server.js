@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 // --- Core Packages ---
+const passport = require("passport");
 const express = require('express');
 const cors = require('cors'); // <-- As you correctly identified, we need this
 const mongoose = require('mongoose');
