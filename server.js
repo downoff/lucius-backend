@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-// --- Core Packages & Modules ---
+// --- Core Packages ---
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -21,6 +21,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { TwitterApi } = require('twitter-api-v2');
 const sgMail = require('@sendgrid/mail');
 const { nanoid } = require('nanoid');
+const { YoutubeTranscript } = require('youtube-transcript'); // <-- NEW
 
 // --- Local Modules ---
 const authMiddleware = require('./middleware/auth');
@@ -75,24 +76,27 @@ const publicApiLimiter = rateLimit({
     message: { message: 'You have reached the limit for our free tools.' }
 });
 
-// --- FINAL "GOD-LIKE" ROUTE: THE GTA VI MISSION GENERATOR ---
-app.post('/api/public/generate-gta-mission', publicApiLimiter, async (req, res) => {
+// --- FINAL "GOD-LIKE" ROUTE: THE DIGITAL GHOST ENGINE ---
+app.post('/api/public/analyze-viral-dna', publicApiLimiter, async (req, res) => {
     try {
-        const { gameplay } = req.body;
-        if (!gameplay) {
-            return res.status(400).json({ message: 'Gameplay description is required.' });
+        const { videoUrl } = req.body;
+        if (!videoUrl) {
+            return res.status(400).json({ message: 'Video URL is required.' });
         }
 
+        // Step 1: Extract the transcript
+        const transcript = await YoutubeTranscript.fetchTranscript(videoUrl);
+        const transcriptText = transcript.map(item => item.text).join(' ');
+
+        // Step 2: Send to the AI for analysis and templating
         const prompt = `
-            Act as a world-class viral content strategist for a GTA VI creator. My last gameplay session was: "${gameplay}".
-            Generate a complete "Content Mission Briefing" for me.
-            The output must be a valid JSON object with a single key, "mission".
-            The value of "mission" should be an object with the following keys:
-            - "mission_title": A short, badass, mission-style title for the briefing (e.g., "OPERATION: SUNSET HEIST").
-            - "viral_titles": An array of 3 unique, high-click-through-rate, "MrBeast-style" video titles based on the gameplay.
-            - "short_script": A short, punchy, 15-second script for a TikTok or YouTube Short, complete with camera directions.
-            - "hashtags": A string of 5 strategic hashtags for discovery.
-            - "crew_recruitment_post": A short, engaging tweet to recruit other players for a similar mission.
+            Act as a world-class viral strategist like MrBeast. I have a transcript from a successful YouTube Short: "${transcriptText.substring(0, 2000)}".
+            First, deconstruct its 'Viral DNA' by analyzing its hook, pacing, and core message.
+            Second, create a new, reusable "Content Mission Briefing" based on this DNA that another creator can use for a completely different topic.
+            The output must be a valid JSON object with a single key, "briefing".
+            The value of "briefing" should be an object with two keys:
+            - "viral_dna_analysis": A short, insightful paragraph explaining why the original video worked.
+            - "mission_template": A step-by-step template for a new video, including placeholders like "[YOUR TOPIC]" and "[YOUR KEY MESSAGE]".
         `;
         
         const completion = await openai.chat.completions.create({
@@ -104,8 +108,8 @@ app.post('/api/public/generate-gta-mission', publicApiLimiter, async (req, res) 
         const data = JSON.parse(completion.choices[0].message.content);
         res.json(data);
     } catch (error) {
-        console.error("GTA Mission Error:", error);
-        res.status(500).json({ message: "Failed to generate mission briefing." });
+        console.error("Viral DNA Error:", error);
+        res.status(500).json({ message: "Failed to analyze video. Please ensure it's a valid YouTube Short with captions." });
     }
 });
 
