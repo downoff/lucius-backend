@@ -28,7 +28,7 @@ const User = require('./models/User');
 const ScheduledPost = require('./models/ScheduledPost');
 const Conversation = require('./models/Conversation');
 const Canvas = require('./models/Canvas');
-const Win = require('./models/Win'); // <-- NEW
+const Win = require('./models/Win');
 
 // --- App Initialization ---
 const app = express();
@@ -76,62 +76,29 @@ const publicApiLimiter = rateLimit({
     message: { message: 'You have reached the limit for our free tools.' }
 });
 
-// --- NEW PUBLIC "WALL OF WINS" ROUTE ---
-app.get('/api/public/wins', publicApiLimiter, async (req, res) => {
+// --- FINAL "GOD-LIKE" ROUTE: THE CANVA MAGIC ENGINE ---
+app.post('/api/public/generate-for-canva', publicApiLimiter, async (req, res) => {
     try {
-        const wins = await Win.find().sort({ createdAt: -1 }).limit(20);
-        res.json(wins);
-    } catch (error) {
-        console.error("Error fetching wins:", error);
-        res.status(500).json({ message: 'Failed to fetch wins.' });
-    }
-});
-
-
-// ... (All your other public and private API routes, including the UPGRADED AI routes)
-
-// --- UPGRADED PRIVATE AI ROUTES (to create "wins") ---
-app.post('/api/ai/generate', authMiddleware, async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id);
-        if (!user) return res.status(404).json({ message: "User not found." });
-        if (!user.isPro && user.credits < 1) return res.status(402).json({ message: 'You have run out of credits.' });
-
-        const { prompt } = req.body;
-        if (!prompt) return res.status(400).json({ message: 'Prompt is required.' });
-
-        const systemPrompt = user.brandVoicePrompt || "You are an expert social media marketer.";
-
+        const { topic, templateId } = req.body;
+        if (!topic || !templateId) {
+            return res.status(400).json({ message: 'Topic and template ID are required.' });
+        }
+        // This prompt is engineered to be perfect for a visual template
+        const prompt = `Act as a world-class copywriter. My audience is on Instagram. My topic is "${topic}". Generate the perfect, concise text to fit an Instagram template called "${templateId}". The output should be a single, engaging, and visually scannable paragraph.`;
+        
         const completion = await openai.chat.completions.create({
             model: "gpt-4o",
-            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+            messages: [{ role: "user", content: prompt }],
         });
-        
-        const text = completion.choices[0].message.content;
-        
-        if (!user.isPro) user.credits -= 1;
-        
-        const newConversation = new Conversation({
-            userId: user._id,
-            title: prompt.substring(0, 40) + "...",
-            messages: [{ role: 'user', content: prompt }, { role: 'model', content: text }]
-        });
-
-        // After a successful generation, create a "win"
-        const win = new Win({
-            niche: "A Creator", // We can make this smarter later by analyzing the user's profile
-            action: "generated a new social media post.",
-            template: prompt 
-        });
-        
-        await Promise.all([user.save(), newConversation.save(), win.save()]);
-        res.json({ text, remainingCredits: user.credits });
+        res.json({ text: completion.choices[0].message.content });
     } catch (error) {
-        console.error("CRITICAL AI Generation error:", error);
-        res.status(500).json({ message: 'A critical error occurred with the AI.' });
+        console.error("Canva Magic Error:", error);
+        res.status(500).json({ message: "Failed to generate text." });
     }
 });
 
+
+// ... (All your other public and private API routes)
 
 // --- Start Server ---
 app.listen(port, () => {
