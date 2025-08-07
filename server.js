@@ -21,7 +21,6 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { TwitterApi } = require('twitter-api-v2');
 const sgMail = require('@sendgrid/mail');
 const { nanoid } = require('nanoid');
-const { YoutubeTranscript } = require('youtube-transcript'); // <-- NEW
 
 // --- Local Modules ---
 const authMiddleware = require('./middleware/auth');
@@ -29,6 +28,7 @@ const User = require('./models/User');
 const ScheduledPost = require('./models/ScheduledPost');
 const Conversation = require('./models/Conversation');
 const Canvas = require('./models/Canvas');
+const Win = require('./models/Win'); // <-- NEW
 
 // --- App Initialization ---
 const app = express();
@@ -76,45 +76,62 @@ const publicApiLimiter = rateLimit({
     message: { message: 'You have reached the limit for our free tools.' }
 });
 
-// --- FINAL "GOD-LIKE" ROUTE: THE DIGITAL GHOST ENGINE ---
-app.post('/api/public/analyze-viral-dna', publicApiLimiter, async (req, res) => {
+// --- NEW PUBLIC "WALL OF WINS" ROUTE ---
+app.get('/api/public/wins', publicApiLimiter, async (req, res) => {
     try {
-        const { videoUrl } = req.body;
-        if (!videoUrl) {
-            return res.status(400).json({ message: 'Video URL is required.' });
-        }
-
-        // Step 1: Extract the transcript
-        const transcript = await YoutubeTranscript.fetchTranscript(videoUrl);
-        const transcriptText = transcript.map(item => item.text).join(' ');
-
-        // Step 2: Send to the AI for analysis and templating
-        const prompt = `
-            Act as a world-class viral strategist like MrBeast. I have a transcript from a successful YouTube Short: "${transcriptText.substring(0, 2000)}".
-            First, deconstruct its 'Viral DNA' by analyzing its hook, pacing, and core message.
-            Second, create a new, reusable "Content Mission Briefing" based on this DNA that another creator can use for a completely different topic.
-            The output must be a valid JSON object with a single key, "briefing".
-            The value of "briefing" should be an object with two keys:
-            - "viral_dna_analysis": A short, insightful paragraph explaining why the original video worked.
-            - "mission_template": A step-by-step template for a new video, including placeholders like "[YOUR TOPIC]" and "[YOUR KEY MESSAGE]".
-        `;
-        
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-        });
-        
-        const data = JSON.parse(completion.choices[0].message.content);
-        res.json(data);
+        const wins = await Win.find().sort({ createdAt: -1 }).limit(20);
+        res.json(wins);
     } catch (error) {
-        console.error("Viral DNA Error:", error);
-        res.status(500).json({ message: "Failed to analyze video. Please ensure it's a valid YouTube Short with captions." });
+        console.error("Error fetching wins:", error);
+        res.status(500).json({ message: 'Failed to fetch wins.' });
     }
 });
 
 
-// ... (All your other public and private API routes)
+// ... (All your other public and private API routes, including the UPGRADED AI routes)
+
+// --- UPGRADED PRIVATE AI ROUTES (to create "wins") ---
+app.post('/api/ai/generate', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ message: "User not found." });
+        if (!user.isPro && user.credits < 1) return res.status(402).json({ message: 'You have run out of credits.' });
+
+        const { prompt } = req.body;
+        if (!prompt) return res.status(400).json({ message: 'Prompt is required.' });
+
+        const systemPrompt = user.brandVoicePrompt || "You are an expert social media marketer.";
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+        });
+        
+        const text = completion.choices[0].message.content;
+        
+        if (!user.isPro) user.credits -= 1;
+        
+        const newConversation = new Conversation({
+            userId: user._id,
+            title: prompt.substring(0, 40) + "...",
+            messages: [{ role: 'user', content: prompt }, { role: 'model', content: text }]
+        });
+
+        // After a successful generation, create a "win"
+        const win = new Win({
+            niche: "A Creator", // We can make this smarter later by analyzing the user's profile
+            action: "generated a new social media post.",
+            template: prompt 
+        });
+        
+        await Promise.all([user.save(), newConversation.save(), win.save()]);
+        res.json({ text, remainingCredits: user.credits });
+    } catch (error) {
+        console.error("CRITICAL AI Generation error:", error);
+        res.status(500).json({ message: 'A critical error occurred with the AI.' });
+    }
+});
+
 
 // --- Start Server ---
 app.listen(port, () => {
