@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-// --- Core Packages ---
+// --- Core Packages & Modules ---
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
