@@ -78,9 +78,7 @@ passport.use(new GoogleStrategy({
   async (accessToken, refreshToken, profile, done) => {
     try {
       let user = await User.findOne({ googleId: profile.id });
-      if (user) {
-        return done(null, user);
-      }
+      if (user) return done(null, user);
       user = await User.findOne({ email: profile.emails[0].value });
       if (user) {
         user.googleId = profile.id;
@@ -101,15 +99,10 @@ passport.use(new GoogleStrategy({
     }
   }
 ));
-
-// (Your full Passport.js config for Twitter should also be here)
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser((id, done) => {
-    User.findById(id, (err, user) => {
-        done(err, user);
-    });
+    User.findById(id, (err, user) => done(err, user));
 });
-
 
 // --- AUTHENTICATION ROUTES ---
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
@@ -118,16 +111,27 @@ app.get('/auth/google/callback', passport.authenticate('google', { failureRedire
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5h' });
     res.redirect(`https://www.ailucius.com/auth-success.html?token=${token}`);
 });
-// (Your Twitter auth routes should be here)
 
-// --- PUBLIC API ROUTES ---
-// (All your public API routes for the demo, free tools, etc. should be here)
+app.post('/api/users/register', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ message: 'Email and password are required.' });
+        }
+        let user = await User.findOne({ email });
+        if (user) { return res.status(400).json({ message: 'User with this email already exists.' }); }
+        
+        user = new User({ email, password, name: email.split('@')[0] });
+        await user.save();
 
-// --- PRIVATE (AUTHENTICATED) API ROUTES ---
-// (All your private API routes for AI tools, user management, billing, etc. should be here)
+        res.status(201).json({ message: 'Success! Please log in with your new account.' });
+    } catch (error) {
+        console.error("Registration error:", error);
+        res.status(500).json({ message: 'Server error during registration.' });
+    }
+});
 
-// --- AUTOMATED ENGINES (CRON JOBS) ---
-// (Your full cron job logic for credit refills and post scheduling should be here)
+// ... (All other routes for login, free tools, private tools, etc. should be here)
 
 // --- Start Server ---
 app.listen(port, () => {
