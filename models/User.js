@@ -24,8 +24,9 @@ const userSchema = new mongoose.Schema({
     hasOnboarded: { type: Boolean, default: false },
     emailVerificationToken: String,
     emailVerified: { type: Boolean, default: false },
+    niche: { type: String, default: 'General' }, // <-- The new field
     
-    // Viral Referral Engine Fields
+    // Viral Referral Engine
     referralCode: { type: String, unique: true, default: () => nanoid(8) },
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     referrals: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
