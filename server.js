@@ -78,6 +78,43 @@ app.get('/health', (req, res) => res.status(200).json({ status: 'ok', message: '
 
 // --- Passport.js Strategies ---
 // (Your full Passport.js config for Google and Twitter should be here)
+passport.serializeUser((user, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await User.findById(id);
+    done(null, user);
+  } catch (err) {
+    done(err, null);
+  }
+});
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: "/auth/google/callback"
+  },
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+      let user = await User.findOne({ googleId: profile.id });
+
+      if (!user) {
+        user = new User({
+          googleId: profile.id,
+          email: profile.emails[0].value,
+          name: profile.displayName
+        });
+        await user.save();
+      }
+
+      return done(null, user);
+    } catch (err) {
+      return done(err, null);
+    }
+  }
+));
+
 
 // --- PUBLIC API ROUTES ---
 const publicApiLimiter = rateLimit({
@@ -141,6 +178,21 @@ app.post('/api/users/register', async (req, res) => {
     return res.status(500).json({ message: 'Server error during registration.' });
   }
 });
+// --- GOOGLE AUTH ROUTES ---
+
+// Step 1: Start Google OAuth
+app.get('/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+// Step 2: Google callback
+app.get('/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  (req, res) => {
+    // After successful login, redirect to your frontend dashboard
+    res.redirect('https://www.ailucius.com/dashboard');
+  }
+);
 
 // --- Start Server ---
 app.listen(port, () => {
