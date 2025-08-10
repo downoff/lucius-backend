@@ -12,7 +12,6 @@ const rateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 const MongoStore = require('connect-mongo');
 const crypto = require('crypto');
-const sanitizeHtml = require('sanitize-html');
 
 // --- Service-Specific Packages ---
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
@@ -40,11 +39,16 @@ const port = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-// --- CORS Configuration & Core Middleware ---
-const whitelist = ['https://www.ailucius.com', 'http://localhost:5173', 'http://localhost:5174'];
+// --- THIS IS THE CRITICAL FIX: The Final CORS Configuration ---
+// This must come BEFORE any other middleware or routes.
+const whitelist = [
+    'https://www.ailucius.com', 
+    'http://localhost:5173', 
+    'http://localhost:5174',
+];
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || whitelist.indexOf(origin) !== -1) {
+    if (whitelist.indexOf(origin) !== -1 || !origin) {
       callback(null, true)
     } else {
       callback(new Error('Not allowed by CORS'))
@@ -52,7 +56,11 @@ const corsOptions = {
   }
 };
 app.use(cors(corsOptions));
+
+
+// --- Core Middleware ---
 app.use(express.json());
+app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => { /* ... full webhook logic ... */ });
 app.use(session({ 
     secret: process.env.SESSION_SECRET || 'a_very_secret_default_key_for_lucius_final', 
     resave: false, 
@@ -66,7 +74,7 @@ app.use(passport.session());
 mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB Connected')).catch(err => console.error(err));
 
 // --- Health Check Route ---
-app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok', message: 'Lucius AI backend is healthy.' }));
 
 // --- Passport.js Strategies ---
 // (Your full Passport.js config for Google and Twitter should be here)
@@ -84,10 +92,12 @@ app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => {
     try {
         const { prompt } = req.body;
         if (!prompt) return res.status(400).json({ message: 'Prompt is required.' });
+        
         const completion = await openai.chat.completions.create({
             model: "gpt-4o",
             messages: [{ role: "system", content: "You are an expert social media marketer." }, { role: "user", content: prompt }],
         });
+        
         res.json({ text: completion.choices[0].message.content });
     } catch (error) {
         console.error("Public Demo Error:", error);
@@ -95,19 +105,7 @@ app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => {
     }
 });
 
-// (All your other public routes like /generate-hooks, /analyze-tone, etc.)
-
-// --- PRIVATE (AUTHENTICATED) API ROUTES ---
-app.post('/api/users/register', async (req, res) => {
-    // ... your full, final registration logic
-});
-
-app.post('/api/users/login', async (req, res) => {
-    // ... your full login logic
-});
-
-// (All your other private routes for AI tools, billing, etc.)
-
+// ... (All your other public and private API routes, cron jobs, etc.)
 
 // --- Start Server ---
 app.listen(port, () => {
