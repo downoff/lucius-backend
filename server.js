@@ -110,7 +110,6 @@ passport.deserializeUser((id, done) => {
     });
 });
 
-
 // --- AUTHENTICATION ROUTES ---
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/login', session: false }), (req, res) => {
@@ -118,7 +117,39 @@ app.get('/auth/google/callback', passport.authenticate('google', { failureRedire
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5h' });
     res.redirect(`https://www.ailucius.com/auth-success.html?token=${token}`);
 });
-// (Your Twitter auth routes should be here)
+
+app.post('/api/users/register', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        let user = await User.findOne({ email });
+        if (user) { return res.status(400).json({ message: 'User with this email already exists.' }); }
+
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        user = new User({
+            email,
+            password,
+            name: email.split('@')[0],
+            emailVerificationToken: verificationToken
+        });
+        await user.save();
+
+        const verificationUrl = `https://www.ailucius.com/verify-email?token=${verificationToken}`;
+        const msg = {
+            to: user.email,
+            from: 'support@ailucius.com',
+            subject: 'Welcome to Lucius AI! Please Verify Your Email',
+            html: `Thank you for signing up! Please click this link to verify your email: <a href="${verificationUrl}">${verificationUrl}</a>`,
+        };
+        await sgMail.send(msg);
+
+        res.status(201).json({ message: 'Success! Please check your email to verify your account.' });
+    } catch (error) {
+        console.error("Registration error:", error);
+        res.status(500).json({ message: 'Server error during registration.' });
+    }
+});
+
+// (Your other auth routes like /login, /verify-email, etc. should be here)
 
 // --- PUBLIC API ROUTES ---
 // (All your public API routes for the demo, free tools, etc. should be here)
