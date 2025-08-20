@@ -13,7 +13,7 @@ const rateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 const MongoStore = require('connect-mongo');
 const crypto = require('crypto');
-const fetch = require('node-fetch'); // ✅ needed for Shopify Storefront API calls
+const fetch = require('node-fetch'); // ✅ Shopify Storefront API calls
 
 // --- Service-Specific Packages ---
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
@@ -235,7 +235,39 @@ app.post('/api/public/analyze-shopify-store', publicApiLimiter, async (req, res)
   }
 });
 
-// --- (keep your other API routes here) ---
+// --- 🔥 NEW: GEO Analyzer ---
+app.post('/api/ai/analyze-geo', authMiddleware, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text) {
+      return res.status(400).json({ message: 'Text to analyze is required.' });
+    }
+
+    const prompt = `
+      Act as a world-class Generative Engine Optimization (GEO) strategist. Analyze the following piece of content: "${text}".
+      Your analysis must predict how well this content will perform as a source for AI-powered answer engines (like Google's SGE or Perplexity).
+      The output must be a valid JSON object with a single key, "analysis".
+      The value of "analysis" should be an object with three keys:
+      - "geo_score": An estimated score from 1-100 representing the content's potential to be used as a definitive AI answer.
+      - "strength_analysis": A short, insightful paragraph explaining the strengths of the content for AI engines (e.g., "Clear, factual, and well-structured.").
+      - "improvement_suggestion": A single, powerful suggestion to make the content even more "AI-answer-friendly."
+    `;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+    });
+
+    const data = JSON.parse(completion.choices[0].message.content);
+    res.json(data);
+  } catch (error) {
+    console.error("GEO Analysis Error:", error);
+    res.status(500).json({ message: "Failed to analyze content for GEO." });
+  }
+});
+
+// --- (keep your other private/protected routes here) ---
 
 // --- Start Server ---
 app.listen(port, () => {
