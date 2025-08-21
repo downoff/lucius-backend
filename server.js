@@ -1,7 +1,7 @@
 // server.js
 require('dotenv').config();
 
-// --- Core Packages & Modules ---
+// --- Core Packages ---
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -13,9 +13,9 @@ const rateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 const MongoStore = require('connect-mongo');
 const crypto = require('crypto');
-const fetch = require('node-fetch'); // ✅ Shopify Storefront API calls
+const fetch = require('node-fetch'); // ✅ Shopify API calls
 
-// --- Service-Specific Packages ---
+// --- Services ---
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const TwitterStrategy = require('passport-twitter').Strategy;
 const OpenAI = require('openai');
@@ -36,14 +36,11 @@ const Win = require('./models/Win');
 const Share = require('./models/Share');
 const Project = require('./models/Project');
 
-// --- App Initialization ---
+// --- Init ---
 const app = express();
 const port = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-}
+if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // --- CORS ---
 const whitelist = [
@@ -53,24 +50,23 @@ const whitelist = [
 ];
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || whitelist.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+    if (!origin || whitelist.indexOf(origin) !== -1) callback(null, true);
+    else callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
 }));
 
-// --- Body Parsers ---
+// --- Stripe Webhooks ---
 app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
+    // TODO: implement signature verification
     return res.json({ received: true });
   } catch (err) {
     console.error('Stripe webhook error:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 });
+
 app.use(express.json());
 
 // --- Sessions ---
@@ -92,13 +88,14 @@ app.use(passport.session());
 
 // --- Database ---
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB Connected'))
+  .then(() => console.log('✅ MongoDB Connected'))
   .catch((err) => console.error(err));
 
 // --- Health Check ---
-app.get('/health', (req, res) =>
-  res.status(200).json({ status: 'ok', message: 'Lucius AI backend is healthy.' })
-);
+app.get('/health', (req, res) => res.status(200).json({
+  status: 'ok',
+  message: 'Lucius AI backend is healthy.',
+}));
 
 // --- Passport Strategies ---
 passport.serializeUser((user, done) => done(null, user.id));
@@ -110,29 +107,27 @@ passport.deserializeUser(async (id, done) => {
     done(err, null);
   }
 });
-passport.use(new GoogleStrategy(
-  {
-    clientID: process.env.GOOGLE_CLIENT_ID || '',
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3000/auth/google/callback',
-  },
-  async (accessToken, refreshToken, profile, done) => {
-    try {
-      let user = await User.findOne({ googleId: profile.id });
-      if (!user) {
-        user = new User({
-          googleId: profile.id,
-          email: profile.emails?.[0]?.value,
-          name: profile.displayName,
-        });
-        await user.save();
-      }
-      return done(null, user);
-    } catch (err) {
-      return done(err, null);
+
+passport.use(new GoogleStrategy({
+  clientID: process.env.GOOGLE_CLIENT_ID || '',
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3000/auth/google/callback',
+}, async (accessToken, refreshToken, profile, done) => {
+  try {
+    let user = await User.findOne({ googleId: profile.id });
+    if (!user) {
+      user = new User({
+        googleId: profile.id,
+        email: profile.emails?.[0]?.value,
+        name: profile.displayName,
+      });
+      await user.save();
     }
+    return done(null, user);
+  } catch (err) {
+    return done(err, null);
   }
-));
+}));
 
 // --- Rate Limiters ---
 const publicApiLimiter = rateLimit({
@@ -164,13 +159,11 @@ app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => {
   }
 });
 
-// --- 🔥 NEW: Shopify Store Analyzer ---
+// --- Shopify Analyzer ---
 app.post('/api/public/analyze-shopify-store', publicApiLimiter, async (req, res) => {
   try {
     const { storeUrl } = req.body;
-    if (!storeUrl) {
-      return res.status(400).json({ message: 'Shopify store URL is required.' });
-    }
+    if (!storeUrl) return res.status(400).json({ message: 'Shopify store URL is required.' });
 
     const storefrontAccessToken = process.env.SHOPIFY_STOREFRONT_API_TOKEN;
     const shopifyGraphQLEndpoint = `https://${storeUrl}/api/2023-10/graphql.json`;
@@ -208,18 +201,13 @@ app.post('/api/public/analyze-shopify-store', publicApiLimiter, async (req, res)
       .join('\n\n');
 
     const prompt = `
-      Act as a world-class e-commerce conversion strategist.
-      I have a Shopify store. Here are some of my products:
-      ---
-      ${productInfo}
-      ---
-      Based on this information, generate a complete "First 5 AI-Optimized Assets" package for me.
-      The output must be a valid JSON object with a single key, "assets".
-      The value of "assets" should be an object with three keys:
-      - "rewritten_descriptions": An array of 3 high-converting, SEO-optimized product descriptions.
-      - "ad_headlines": An array of 3 punchy ad headlines for a Facebook or Google ad campaign.
-      - "welcome_email": A short, engaging welcome email draft for new customers.
-    `;
+Act as a world-class e-commerce conversion strategist.
+Here are some Shopify products: --- ${productInfo} ---
+Generate a JSON object with key "assets" containing:
+- rewritten_descriptions: 3 optimized descriptions
+- ad_headlines: 3 ad headlines
+- welcome_email: 1 short welcome email
+`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -231,27 +219,24 @@ app.post('/api/public/analyze-shopify-store', publicApiLimiter, async (req, res)
     res.json(data);
   } catch (error) {
     console.error("Shopify Analysis Error:", error);
-    res.status(500).json({ message: "Failed to analyze store. Please ensure it's a valid Shopify URL." });
+    res.status(500).json({ message: "Failed to analyze store." });
   }
 });
 
-// --- 🔥 NEW: GEO Analyzer ---
+// --- GEO Analyzer ---
 app.post('/api/ai/analyze-geo', authMiddleware, async (req, res) => {
   try {
     const { text } = req.body;
-    if (!text) {
-      return res.status(400).json({ message: 'Text to analyze is required.' });
-    }
+    if (!text) return res.status(400).json({ message: 'Text is required.' });
 
     const prompt = `
-      Act as a world-class Generative Engine Optimization (GEO) strategist. Analyze the following piece of content: "${text}".
-      Your analysis must predict how well this content will perform as a source for AI-powered answer engines (like Google's SGE or Perplexity).
-      The output must be a valid JSON object with a single key, "analysis".
-      The value of "analysis" should be an object with three keys:
-      - "geo_score": An estimated score from 1-100 representing the content's potential to be used as a definitive AI answer.
-      - "strength_analysis": A short, insightful paragraph explaining the strengths of the content for AI engines (e.g., "Clear, factual, and well-structured.").
-      - "improvement_suggestion": A single, powerful suggestion to make the content even more "AI-answer-friendly."
-    `;
+Act as a world-class Generative Engine Optimization (GEO) strategist.
+Analyze this content: "${text}".
+Return JSON with:
+- geo_score (1-100)
+- strength_analysis
+- improvement_suggestion
+`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -267,9 +252,7 @@ app.post('/api/ai/analyze-geo', authMiddleware, async (req, res) => {
   }
 });
 
-// --- (keep your other private/protected routes here) ---
-
-// --- Start Server ---
+// --- Start ---
 app.listen(port, () => {
-  console.log(`Server listening at http://localhost:${port}`);
+  console.log(`🚀 Server listening at http://localhost:${port}`);
 });
