@@ -74,8 +74,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Preflight
-app.options('*', cors());
+// Preflight (Express 5: use /(.*) instead of '*')
+app.options('/(.*)', cors());
 
 // --- Stripe Webhook MUST be before express.json() ---
 app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
