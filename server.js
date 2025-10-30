@@ -74,9 +74,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Preflight (Express 5: use /(.*) instead of '*')
-app.options('/(.*)', cors());
-
 // --- Stripe Webhook MUST be before express.json() ---
 app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
@@ -108,6 +105,14 @@ app.use(session({
 
 app.use(passport.initialize());
 app.use(passport.session());
+
+// OPTIONAL: generic OPTIONS fallback (after CORS adds headers)
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204); // no content
+  }
+  next();
+});
 
 // --- Database Connection ---
 mongoose.connect(process.env.MONGO_URI)
