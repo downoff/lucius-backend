@@ -9,7 +9,6 @@ const passport = require('passport');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-const cron = require('node-cron');
 const MongoStore = require('connect-mongo');
 const crypto = require('crypto');
 
@@ -32,7 +31,7 @@ const Conversation = require('./models/Conversation');
 const Canvas = require('./models/Canvas');
 const Win = require('./models/Win');
 const Share = require('./models/Share');
-const Project = require('./models/Project'); // <-- NEW
+const Project = require('./models/Project');
 
 // --- App Initialization ---
 const app = express();
@@ -40,32 +39,73 @@ const port = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-// --- Final CORS Configuration ---
-const whitelist = [
-  'https://www.ailucius.com', 
-  'http://localhost:5173', 
+// (Render behind proxy: enable secure cookies when using HTTPS)
+app.set('trust proxy', 1);
+
+// --- Final CORS Configuration (Render + Local friendly) ---
+const DEFAULT_WHITELIST = [
+  'https://www.ailucius.com',
+  'http://localhost:5173',
   'http://localhost:5174',
 ];
+
+// FRONTEND_ORIGIN=https://your-frontend.onrender.com
+// or FRONTEND_ORIGINS=https://app.ailucius.com,https://your-frontend.onrender.com
+const fromEnvSingle = (process.env.FRONTEND_ORIGIN || '').trim();
+const fromEnvMany = (process.env.FRONTEND_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+const ALLOWLIST = Array.from(
+  new Set([...DEFAULT_WHITELIST, ...fromEnvMany, fromEnvSingle].filter(Boolean))
+);
+
+console.log('[CORS allowlist]', ALLOWLIST);
+
 app.use(cors({
   origin: function (origin, callback) {
-    if (whitelist.indexOf(origin) !== -1 || !origin) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+    if (!origin) return callback(null, true); // same-origin / non-browser
+    if (ALLOWLIST.includes(origin)) return callback(null, true);
+    return callback(new Error(`Not allowed by CORS: ${origin}`));
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// --- Middleware ---
+// Preflight
+app.options('*', cors());
+
+// --- Stripe Webhook MUST be before express.json() ---
+app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    // TODO: verify signature if using Stripe signing secret
+    // const sig = req.headers['stripe-signature'];
+    // const event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    res.status(200).send({ received: true });
+  } catch (err) {
+    console.error('Stripe webhook error:', err);
+    res.status(400).send(`Webhook Error`);
+  }
+});
+
+// --- JSON + Sessions + Passport ---
 app.use(express.json());
-app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => { /* webhook logic */ });
-app.use(session({ 
-  secret: process.env.SESSION_SECRET || 'a_very_secret_default_key_for_lucius_final', 
-  resave: false, 
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'a_very_secret_default_key_for_lucius_final',
+  resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl: process.env.MONGO_URI })
+  store: MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production', // on Render behind HTTPS
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 7d
+  },
 }));
+
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -88,29 +128,39 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
-passport.use(new GoogleStrategy({
+passport.use(new GoogleStrategy(
+  {
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "https://lucius-ai.onrender.com/auth/google/callback"
+    callbackURL: process.env.GOOGLE_CALLBACK_URL || "https://lucius-ai.onrender.com/auth/google/callback",
   },
   async (accessToken, refreshToken, profile, done) => {
     try {
       let user = await User.findOne({ googleId: profile.id });
-
       if (!user) {
         user = new User({
           googleId: profile.id,
-          email: profile.emails[0].value,
+          email: profile.emails?.[0]?.value,
           name: profile.displayName
         });
         await user.save();
       }
-
       return done(null, user);
     } catch (err) {
       return done(err, null);
     }
   }
+));
+
+// (TwitterStrategy left configured but unused in this snippet)
+passport.use(new TwitterStrategy(
+  {
+    consumerKey: process.env.TWITTER_CONSUMER_KEY || 'x',
+    consumerSecret: process.env.TWITTER_CONSUMER_SECRET || 'x',
+    callbackURL: process.env.TWITTER_CALLBACK_URL || "https://lucius-ai.onrender.com/auth/twitter/callback",
+    includeEmail: true,
+  },
+  (token, tokenSecret, profile, done) => done(null, profile)
 ));
 
 // --- Public API ---
@@ -129,7 +179,10 @@ app.post('/api/public/generate-demo', publicApiLimiter, async (req, res) => {
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
-      messages: [{ role: "system", content: "You are an expert social media marketer." }, { role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: "You are an expert social media marketer." },
+        { role: "user", content: prompt }
+      ],
     });
 
     res.json({ text: completion.choices[0].message.content });
@@ -151,14 +204,13 @@ app.post('/api/users/register', async (req, res) => {
       referredByUser = await User.findOne({ referralCode });
     }
 
-    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
     const verificationToken = crypto.randomBytes(32).toString('hex');
-    user = new User({ 
-      email, 
-      password: hashedPassword, 
+    user = new User({
+      email,
+      password: hashedPassword,
       name: email.split('@')[0],
       emailVerificationToken: verificationToken,
       referredBy: referredByUser ? referredByUser._id : null,
@@ -177,10 +229,7 @@ app.post('/api/users/register', async (req, res) => {
 app.post('/api/users/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required.' });
-    }
+    if (!email || !password) return res.status(400).json({ message: 'Email and password are required.' });
 
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ message: 'Invalid credentials.' });
@@ -188,7 +237,6 @@ app.post('/api/users/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: 'Invalid credentials.' });
 
-    // Create JWT token
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
     res.json({ token, user: { id: user._id, email: user.email, name: user.name } });
@@ -210,9 +258,7 @@ app.get('/api/users/me', authMiddleware, async (req, res) => {
 
 // --- Google OAuth with Niche Capture ---
 app.get('/auth/google', (req, res, next) => {
-  if (req.query.niche) {
-    req.session.niche = String(req.query.niche).trim().toLowerCase();
-  }
+  if (req.query.niche) req.session.niche = String(req.query.niche).trim().toLowerCase();
   passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
 });
 
@@ -233,6 +279,11 @@ app.get('/auth/google/callback',
     }
   }
 );
+
+// --- Tender Copilot Routes ---
+app.use("/api/company", require("./routes/company"));
+app.use("/api/tenders", require("./routes/tenders"));
+app.use("/api/ai-tender", require("./routes/tender-ai"));
 
 // --- THE FINAL, "GOD-LIKE" ROUTE: THE AGI AGENT ---
 app.post('/api/agi/execute-mission', authMiddleware, async (req, res) => {
