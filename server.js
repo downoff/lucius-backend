@@ -105,6 +105,8 @@ app.use(session({
 
 app.use(passport.initialize());
 app.use(passport.session());
+app.use("/api/payments", require("./routes/payments"));
+
 
 // OPTIONAL: generic OPTIONS fallback (after CORS adds headers)
 app.use((req, res, next) => {
