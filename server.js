@@ -75,17 +75,60 @@ app.use(cors({
 }));
 
 // --- Stripe Webhook MUST be before express.json() ---
+// --- Stripe Webhook (must be BEFORE express.json) ---
 app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  let event;
+
   try {
-    // TODO: verify signature if using Stripe signing secret
-    // const sig = req.headers['stripe-signature'];
-    // const event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-    res.status(200).send({ received: true });
+    if (endpointSecret) {
+      const sig = req.headers['stripe-signature'];
+      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    } else {
+      // Unsafe fallback (dev only): parse without verify
+      event = JSON.parse(req.body);
+    }
   } catch (err) {
-    console.error('Stripe webhook error:', err);
-    res.status(400).send(`Webhook Error`);
+    console.error('❌ Stripe webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+
+      // metadata from session
+      const company_id = session.metadata?.company_id || '';
+      const email = session.customer_details?.email || session.customer_email || '';
+
+      const Company = require('./models/Company');
+
+      let query = null;
+      if (company_id) {
+        query = { _id: company_id };
+      } else if (email) {
+        query = { contact_emails: { $in: [email] } };
+      }
+
+      if (query) {
+        await Company.findOneAndUpdate(
+          query,
+          { $set: { is_paid: true, plan: 'starter', last_payment_at: new Date() } },
+          { new: true }
+        );
+        console.log('✅ Company marked paid via webhook');
+      } else {
+        console.warn('⚠️ No company matched in webhook');
+      }
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error('Stripe webhook handler error:', err);
+    res.status(500).send('Webhook handler error');
   }
 });
+
 
 // --- JSON + Sessions + Passport ---
 app.use(express.json());
