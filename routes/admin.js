@@ -1,10 +1,7 @@
 // routes/admin.js
-const express = require("express");
-const router = express.Router();
+const router = require("express").Router();
 
-// Stub admin endpoint for leads (wire to DB if storing)
-router.get("/leads", async (_req, res) => {
-  res.json({ items: [] });
-});
+// Simple ping
+router.get("/ping", (_req, res) => res.json({ ok: true }));
 
 module.exports = router;

@@ -1,78 +1,79 @@
 // routes/tenders.js
-const express = require("express");
-const router = express.Router();
-const mongoose = require("mongoose");
+const router = require("express").Router();
+const Tender = require("../models/Tender");
+const Company = require("../models/Company");
+const { scoreTender } = require("../utils/score");
 
-const TenderSchema = new mongoose.Schema({
-  source: String,
-  title: String,
-  description_raw: String,
-  authority: String,
-  country: String,
-  deadline_iso: String,
-  cpv_codes: [String],
-  url: String,
-  relevance_score: Number
-}, { timestamps: true });
-
-const Tender = mongoose.models.Tender || mongoose.model("Tender", TenderSchema);
-
-// Seed demo data (idempotent-ish)
+// Seed demo tenders (idempotent)
 router.post("/seed", async (_req, res) => {
   try {
-    const data = [
+    const count = await Tender.countDocuments();
+    if (count > 0) return res.json({ ok: true, already: true });
+
+    await Tender.insertMany([
       {
         source: "TED",
         title: "Development of municipal web portal with AI chatbot",
-        description_raw: "The City seeks a vendor to build a web portal with AI chat, CMS, accessibility.",
-        authority: "City of Rivertown",
-        country: "HR",
-        deadline_iso: new Date(Date.now() + 1000*60*60*24*21).toISOString(),
-        cpv_codes: ["72000000","72200000"],
-        url: "https://ted.europa.eu/notice/1234",
-        relevance_score: 88
+        description_raw:
+          "The City seeks a vendor to build a web portal with AI chat, CMS, accessibility, and integrations.",
+        authority: "City of Example",
+        country: "DE",
+        deadline_iso: new Date(Date.now() + 1000 * 3600 * 24 * 21).toISOString(),
+        cpv_codes: ["72000000", "72400000"],
+        url: "https://ted.europa.eu/portal",
       },
       {
-        source: "E-nabava",
-        title: "Mobile app for public transport (Android/iOS)",
-        description_raw: "Cross-platform mobile app + admin portal.",
-        authority: "Public Transport Authority",
-        country: "BA",
-        deadline_iso: new Date(Date.now() + 1000*60*60*24*14).toISOString(),
-        cpv_codes: ["72400000"],
-        url: "https://example.gov/pt-app",
-        relevance_score: 76
-      }
-    ];
-    await Tender.deleteMany({});
-    await Tender.insertMany(data);
-    res.json({ ok: true });
+        source: "eNabava",
+        title: "Mobile app + web CMS for cultural events",
+        description_raw:
+          "Tourist board requests design and development of mobile apps (iOS/Android) plus a CMS.",
+        authority: "Tourist Board",
+        country: "HR",
+        deadline_iso: new Date(Date.now() + 1000 * 3600 * 24 * 35).toISOString(),
+        cpv_codes: ["72200000", "72400000"],
+        url: "https://example.hr/tender",
+      },
+    ]);
+
+    return res.json({ ok: true });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ message: "seed failed" });
+    return res.status(500).json({ message: "seed error" });
   }
 });
 
-// List
+// List tenders, scored for the latest company
 router.get("/", async (_req, res) => {
   try {
-    const items = await Tender.find({}).sort({ relevance_score: -1 }).lean();
-    res.json(items);
+    const tenders = await Tender.find().sort({ createdAt: -1 }).lean();
+    const company = await Company.findOne({ active: true }).sort({
+      updatedAt: -1,
+    });
+
+    const out = tenders.map(t => ({
+      ...t,
+      relevance_score: scoreTender(t, company),
+    }));
+
+    return res.json(out);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ message: "list failed" });
+    return res.status(500).json({ message: "tenders error" });
   }
 });
 
-// Detail
 router.get("/:id", async (req, res) => {
   try {
-    const it = await Tender.findById(req.params.id).lean();
-    if (!it) return res.status(404).json({ message: "not found" });
-    res.json(it);
+    const t = await Tender.findById(req.params.id).lean();
+    if (!t) return res.status(404).json({ message: "not found" });
+    const company = await Company.findOne({ active: true }).sort({
+      updatedAt: -1,
+    });
+    const relevance_score = scoreTender(t, company);
+    return res.json({ ...t, relevance_score });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ message: "detail failed" });
+    return res.status(500).json({ message: "tender error" });
   }
 });
 

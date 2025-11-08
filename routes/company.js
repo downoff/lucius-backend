@@ -1,48 +1,50 @@
 // routes/company.js
-const express = require("express");
-const router = express.Router();
-const mongoose = require("mongoose");
+const router = require("express").Router();
+const Company = require("../models/Company");
 
-const CompanySchema = new mongoose.Schema({
-  company_name: String,
-  website: String,
-  countries: [String],
-  cpv_codes: [String],
-  keywords_include: [String],
-  keywords_exclude: [String],
-  max_deadline_days: Number,
-  languages: [String],
-  contact_emails: [String],
-  stripe_customer_id: String,
-  billing_status: { type: String, default: "inactive" } // "active" when paid
-}, { timestamps: true });
-
-const Company = mongoose.models.Company || mongoose.model("Company", CompanySchema);
-
-// Create/Update company profile
+// Create/replace (simple upsert by active flag)
 router.post("/", async (req, res) => {
   try {
     const payload = req.body || {};
-    const doc = await Company.findOneAndUpdate(
-      { website: payload.website || "" },
-      payload,
-      { new: true, upsert: true, setDefaultsOnInsert: true }
-    );
-    res.json(doc);
+    // Keep most recent as "active"
+    await Company.updateMany({}, { $set: { active: false } });
+    const doc = await Company.create({ ...payload, active: true });
+    return res.json(doc);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ message: "company create/update failed" });
+    return res.status(500).json({ message: "company create error" });
   }
 });
 
-// Status (latest profile)
+// Status (for navbar/pricing gating)
 router.get("/status", async (_req, res) => {
   try {
-    const doc = await Company.findOne().sort({ updatedAt: -1 }).lean();
-    res.json(doc || {});
+    const c = await Company.findOne({ active: true }).sort({ updatedAt: -1 });
+    if (!c) return res.json({ exists: false });
+    return res.json({
+      exists: true,
+      company: {
+        id: c._id,
+        company_name: c.company_name,
+        stripe_customer_id: c.stripe_customer_id || null,
+      },
+      is_paid: Boolean(c.stripe_customer_id),
+    });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ message: "status failed" });
+    return res.status(500).json({ message: "company status error" });
+  }
+});
+
+// Get latest company doc
+router.get("/", async (_req, res) => {
+  try {
+    const c = await Company.findOne({ active: true }).sort({ updatedAt: -1 });
+    if (!c) return res.status(404).json({ message: "no company" });
+    return res.json(c);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: "company get error" });
   }
 });
 

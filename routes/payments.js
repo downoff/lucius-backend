@@ -1,61 +1,88 @@
 // routes/payments.js
-const express = require("express");
-const router = express.Router();
-const mongoose = require("mongoose");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const router = require("express").Router();
+const Company = require("../models/Company");
+const Stripe = require("stripe");
 
-const CompanySchema = new mongoose.Schema({
-  company_name: String,
-  website: String,
-  stripe_customer_id: String,
-  billing_status: { type: String, default: "inactive" }
-}, { timestamps: true });
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-const Company = mongoose.models.Company || mongoose.model("Company", CompanySchema);
+function frontendBase() {
+  const f =
+    process.env.FRONTEND_ORIGIN ||
+    (process.env.NODE_ENV === "production"
+      ? "https://www.ailucius.com"
+      : "http://localhost:5173");
+  return f.replace(/\/+$/, "");
+}
 
-// Create Checkout Session (subscription)
-router.post("/create-checkout-session", async (_req, res) => {
+// Create a Checkout Session (subscribe the company)
+router.post("/create-checkout-session", async (req, res) => {
   try {
-    const company = await Company.findOne().sort({ updatedAt: -1 });
-    if (!company) return res.status(400).json({ message: "no company profile" });
+    const { company_id, price_id } = req.body || {};
+    const company =
+      (company_id &&
+        (await Company.findById(company_id))) ||
+      (await Company.findOne({ active: true }).sort({ updatedAt: -1 }));
 
-    const customerObj = company.stripe_customer_id ? { customer: company.stripe_customer_id } : {};
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
-      ...customerObj,
-      success_url: `${process.env.FRONTEND_ORIGIN || "https://www.ailucius.com"}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_ORIGIN || "https://www.ailucius.com"}/cancel`,
-    });
+    if (!company) return res.status(400).json({ message: "no company" });
 
-    // if we didn’t have a customer recorded yet, persist it
-    if (!company.stripe_customer_id && session.customer) {
-      company.stripe_customer_id = typeof session.customer === "string" ? session.customer : session.customer.id;
+    const price = price_id || process.env.STRIPE_PRICE_ID;
+    if (!price)
+      return res
+        .status(400)
+        .json({ message: "Missing STRIPE_PRICE_ID or price_id" });
+
+    // Ensure customer exists/attach
+    let customerId = company.stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        name: company.company_name || "Lucius Customer",
+        email: (company.contact_emails && company.contact_emails[0]) || undefined,
+        metadata: { company_id: String(company._id) },
+      });
+      customerId = customer.id;
+      company.stripe_customer_id = customerId;
       await company.save();
     }
 
-    res.json({ url: session.url });
+    const base = frontendBase();
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      line_items: [{ price, quantity: 1 }],
+      success_url: `${base}/success`,
+      cancel_url: `${base}/cancel`,
+      metadata: { company_id: String(company._id) },
+    });
+
+    return res.json({ url: session.url });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ message: "checkout failed" });
+    return res.status(500).json({ message: "checkout error" });
   }
 });
 
-// Billing portal
-router.post("/create-portal-session", async (_req, res) => {
+// Create a Billing Portal Session
+router.post("/create-portal-session", async (req, res) => {
   try {
-    const company = await Company.findOne().sort({ updatedAt: -1 });
-    if (!company?.stripe_customer_id) return res.status(400).json({ message: "no stripe customer" });
+    const { company_id } = req.body || {};
+    const company =
+      (company_id &&
+        (await Company.findById(company_id))) ||
+      (await Company.findOne({ active: true }).sort({ updatedAt: -1 }));
+    if (!company) return res.status(400).json({ message: "no company" });
+    if (!company.stripe_customer_id)
+      return res.status(400).json({ message: "no stripe customer" });
 
+    const base = frontendBase();
     const portal = await stripe.billingPortal.sessions.create({
       customer: company.stripe_customer_id,
-      return_url: process.env.FRONTEND_ORIGIN || "https://www.ailucius.com",
+      return_url: `${base}/pricing`,
     });
 
-    res.json({ url: portal.url });
+    return res.json({ url: portal.url });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ message: "portal failed" });
+    return res.status(500).json({ message: "portal error" });
   }
 });
 

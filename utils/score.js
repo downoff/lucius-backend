@@ -1,33 +1,46 @@
-function scoreTenderForCompany(tender, company) {
-  let score = 0;
-  const reasons = [];
-
-  const cpvSet = new Set(company.cpv_codes || []);
-  const overlap = (tender.cpv_codes || []).filter(c => cpvSet.has(c));
-  const cpvPoints = Math.min(10, overlap.length * 5);
-  if (cpvPoints > 0) { score += cpvPoints; reasons.push(`CPV overlap x${overlap.length} (+${cpvPoints})`); }
-
-  const text = `${tender.title} ${tender.description_raw}`.toLowerCase();
-  const inc = (company.keywords_include || []).filter(k => k && text.includes(k.toLowerCase()));
-  const incPoints = Math.min(15, inc.length * 3);
-  if (incPoints > 0) { score += incPoints; reasons.push(`Include keywords ${inc.join(', ')} (+${incPoints})`); }
-
-  const exc = (company.keywords_exclude || []).filter(k => k && text.includes(k.toLowerCase()));
-  const excPoints = Math.min(12, exc.length * 4);
-  if (excPoints > 0) { score -= excPoints; reasons.push(`Exclude keywords ${exc.join(', ')} (-${excPoints})`); }
-
-  const daysLeft = Math.ceil((new Date(tender.deadline_iso) - Date.now()) / 86400000);
-  if (!Number.isNaN(daysLeft)) {
-    if (daysLeft <= 14) { score += 10; reasons.push('Urgent deadline (<=14d) (+10)'); }
-    else if (daysLeft <= 30) { score += 5; reasons.push('Approaching deadline (<=30d) (+5)'); }
-  }
-
-  if ((company.countries || []).includes(tender.country)) {
-    score += 8;
-    reasons.push(`Country match ${tender.country} (+8)`);
-  }
-
-  return { score, reasons };
+// utils/score.js
+function normalize(str) {
+  return String(str || "").toLowerCase();
 }
 
-module.exports = { scoreTenderForCompany };
+function scoreTender(t, company) {
+  if (!company) return 0;
+  let score = 0;
+
+  // Country match
+  if (company.countries?.length) {
+    if (company.countries.includes(t.country)) score += 20;
+  }
+
+  // CPV codes
+  if (company.cpv_codes?.length && t.cpv_codes?.length) {
+    const overlap = t.cpv_codes.filter(c => company.cpv_codes.includes(c));
+    score += overlap.length * 10; // simple
+  }
+
+  // Keywords include/exclude
+  const text = normalize(`${t.title} ${t.description_raw}`);
+  for (const kw of company.keywords_include || []) {
+    if (text.includes(normalize(kw))) score += 8;
+  }
+  for (const kw of company.keywords_exclude || []) {
+    if (text.includes(normalize(kw))) score -= 15;
+  }
+
+  // Deadline proximity (sooner = better) – simple heuristic
+  if (t.deadline_iso) {
+    const days =
+      (new Date(t.deadline_iso).getTime() - Date.now()) / (1000 * 3600 * 24);
+    if (!isNaN(days)) {
+      if (days >= 0 && days <= (company.max_deadline_days || 90)) {
+        score += Math.max(0, 15 - Math.floor(days / 7)); // up to +15
+      } else {
+        score -= 5;
+      }
+    }
+  }
+
+  return Math.max(0, Math.round(score));
+}
+
+module.exports = { scoreTender };

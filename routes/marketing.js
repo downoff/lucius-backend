@@ -1,51 +1,25 @@
 // routes/marketing.js
-const express = require("express");
-const router = express.Router();
+const router = require("express").Router();
 const sgMail = require("@sendgrid/mail");
 
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-}
-
-// Lead endpoint
 router.post("/lead", async (req, res) => {
   try {
-    const { email, name, note } = req.body || {};
-    if (!process.env.LEADS_TO_EMAIL || !process.env.LEADS_FROM_EMAIL) {
-      return res.status(200).json({ ok: true, note: "email not configured; skipping send" });
-    }
-    const msg = {
-      to: process.env.LEADS_TO_EMAIL,
-      from: process.env.LEADS_FROM_EMAIL,
-      subject: "New Lucius lead",
-      text: `Email: ${email}\nName: ${name || ""}\nNote: ${note || ""}`,
-    };
-    await sgMail.send(msg);
-    res.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "lead failed" });
-  }
-});
-
-// Press endpoint
-router.post("/press", async (req, res) => {
-  try {
     const { email, message } = req.body || {};
-    if (!process.env.PRESS_TO_EMAIL || !process.env.LEADS_FROM_EMAIL) {
-      return res.status(200).json({ ok: true, note: "email not configured; skipping send" });
+    if (!email) return res.status(400).json({ message: "email required" });
+
+    const to = process.env.PUBLIC_LEADS_EMAIL || "luciusaicomapny@gmail.com";
+    if (process.env.SENDGRID_API_KEY) {
+      await sgMail.send({
+        to,
+        from: process.env.PUBLIC_FROM_EMAIL || "noreply@ailucius.com",
+        subject: "New site lead",
+        text: `Email: ${email}\nMessage: ${message || ""}`,
+      });
     }
-    const msg = {
-      to: process.env.PRESS_TO_EMAIL,
-      from: process.env.LEADS_FROM_EMAIL,
-      subject: "Press message",
-      text: `From: ${email}\n\n${message || ""}`,
-    };
-    await sgMail.send(msg);
-    res.json({ ok: true });
+    return res.json({ ok: true });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ message: "press failed" });
+    return res.status(500).json({ message: "lead error" });
   }
 });
 
