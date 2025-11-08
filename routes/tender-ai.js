@@ -1,74 +1,81 @@
 // routes/tender-ai.js
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const OpenAI = require('openai');
-const Company = require('../models/Company');
+const mongoose = require("mongoose");
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const CompanySchema = new mongoose.Schema({
+  company_name: String,
+  website: String,
+  countries: [String],
+  cpv_codes: [String],
+  keywords_include: [String],
+  keywords_exclude: [String],
+  max_deadline_days: Number,
+  languages: [String],
+  contact_emails: [String],
+  stripe_customer_id: String,
+  billing_status: { type: String, default: "inactive" }
+}, { timestamps: true });
 
-/**
- * Simple paywall guard:
- * For MVP we treat the most recently created company as "current".
- * If there's no company or it's not paid, block the AI draft endpoint.
- */
-async function requirePaid(req, res, next) {
+const TenderSchema = new mongoose.Schema({
+  source: String,
+  title: String,
+  description_raw: String,
+  authority: String,
+  country: String,
+  deadline_iso: String,
+  cpv_codes: [String],
+  url: String,
+  relevance_score: Number
+}, { timestamps: true });
+
+const Company = mongoose.models.Company || mongoose.model("Company", CompanySchema);
+const Tender = mongoose.models.Tender || mongoose.model("Tender", TenderSchema);
+
+// Draft generation (requires active billing)
+router.post("/draft", async (req, res) => {
   try {
-    const company = await Company.findOne().sort({ createdAt: -1 }).lean();
-    if (!company || !company.is_paid) {
-      return res.status(402).json({ error: 'Payment required' });
-    }
-    next();
-  } catch (e) {
-    console.error('requirePaid error', e);
-    res.status(500).json({ error: 'Server error' });
-  }
-}
+    const { tender_id } = req.body || {};
+    const company = await Company.findOne().sort({ updatedAt: -1 }).lean();
+    if (!company) return res.status(400).json({ message: "no company profile" });
 
-/**
- * POST /api/ai-tender/draft
- * Body: { tender: { title, description_raw, authority, country, cpv_codes[], deadline_iso } }
- * Returns: { draft }
- */
-router.post('/draft', requirePaid, async (req, res) => {
-  try {
-    const { tender } = req.body || {};
-    if (!tender || !tender.title) {
-      return res.status(400).json({ error: 'Missing tender payload (title required)' });
+    if (company.billing_status !== "active") {
+      return res.status(402).json({ message: "payment_required" });
     }
 
-    // Build a strong prompt for a structured first draft
-    const prompt = [
-      `You are a government tender proposal writer.`,
-      `Write a concise, compelling first-draft response for the tender below.`,
-      `Return sections: Executive Summary, Our Understanding, Deliverables,`,
-      `Approach & Methodology, Timeline, Team, Past Performance, Compliance,`,
-      `Pricing (placeholder), Risks & Mitigations.`,
-      `Constraints: 600–900 words, plain text (no Markdown tables).`,
+    const tender = await Tender.findById(tender_id).lean();
+    if (!tender) return res.status(404).json({ message: "tender not found" });
+
+    // Replace with your OpenAI call if desired
+    const draft = [
+      `Proposal for: ${tender.title}`,
       ``,
-      `Tender details:`,
-      `- Title: ${tender.title}`,
-      `- Authority: ${tender.authority || 'n/a'} (${tender.country || 'n/a'})`,
-      `- CPV: ${(tender.cpv_codes || []).join(', ') || 'n/a'}`,
-      `- Deadline: ${tender.deadline_iso || 'n/a'}`,
-      `- Description: ${tender.description_raw ? tender.description_raw.slice(0, 3000) : 'n/a'}`,
-    ].join('\n');
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      temperature: 0.4,
-      messages: [
-        { role: 'system', content: 'You write winning, compliant tender responses with clear structure and no fluff.' },
-        { role: 'user', content: prompt },
-      ],
-    });
-
-    const draft = completion.choices?.[0]?.message?.content || '';
-    if (!draft) return res.status(500).json({ error: 'AI returned empty draft' });
+      `Company: ${company.company_name}`,
+      `Website: ${company.website || "-"}`,
+      ``,
+      `Introduction`,
+      `We propose to deliver the full specification described by ${tender.authority}, ensuring accessibility and high performance.`,
+      ``,
+      `Scope of Work`,
+      `• Discovery & UX`,
+      `• Development & QA`,
+      `• Deployment & Training`,
+      ``,
+      `Timeline`,
+      `• Phase 1: 2–3 weeks`,
+      `• Phase 2: 3–4 weeks`,
+      ``,
+      `Budget`,
+      `Final pricing depends on details; we provide a transparent milestone-based schedule.`,
+      ``,
+      `Contact`,
+      `${(company.contact_emails||[]).join(", ") || "—"}`
+    ].join("\n");
 
     res.json({ draft });
   } catch (e) {
-    console.error('AI draft error', e);
-    res.status(500).json({ error: 'AI error' });
+    console.error(e);
+    res.status(500).json({ message: "draft failed" });
   }
 });
 

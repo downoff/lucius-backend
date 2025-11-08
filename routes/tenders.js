@@ -1,69 +1,79 @@
-const express = require('express');
-const Tender = require('../models/Tender');
-const Company = require('../models/Company');
-const { scoreTenderForCompany } = require('../utils/score');
+// routes/tenders.js
+const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 
-// ✅ Seed mock tenders for testing
-router.post('/seed', async (_req, res) => {
-  await Tender.deleteMany({ notice_url: '#', source: 'TED' });
-  const now = Date.now();
-  await Tender.insertMany([
-    {
-      source: 'TED',
-      title: 'Development of municipal web portal with AI chatbot',
-      description_raw: 'The City seeks a vendor to build a web portal with AI chat, CMS, accessibility, hosting.',
-      cpv_codes: ['72200000','72400000'],
-      country: 'HR',
-      authority: 'City of Split',
-      estimated_value_eur: 120000,
-      deadline_iso: new Date(now + 86400000 * 21).toISOString(),
-      published_iso: new Date(now).toISOString(),
-      document_links: [],
-      notice_url: '#',
-      lang: 'en',
-      status: 'new',
-    },
-    {
-      source: 'TED',
-      title: 'Cloud migration and managed support services',
-      description_raw: 'Ministry requests cloud migration with managed services, SSO, monitoring, helpdesk.',
-      cpv_codes: ['72500000','72600000'],
-      country: 'PL',
-      authority: 'Ministry of Digital Affairs',
-      estimated_value_eur: 300000,
-      deadline_iso: new Date(now + 86400000 * 35).toISOString(),
-      published_iso: new Date(now).toISOString(),
-      document_links: [],
-      notice_url: '#',
-      lang: 'en',
-      status: 'new',
-    }
-  ]);
-  res.json({ ok: true });
+const TenderSchema = new mongoose.Schema({
+  source: String,
+  title: String,
+  description_raw: String,
+  authority: String,
+  country: String,
+  deadline_iso: String,
+  cpv_codes: [String],
+  url: String,
+  relevance_score: Number
+}, { timestamps: true });
+
+const Tender = mongoose.models.Tender || mongoose.model("Tender", TenderSchema);
+
+// Seed demo data (idempotent-ish)
+router.post("/seed", async (_req, res) => {
+  try {
+    const data = [
+      {
+        source: "TED",
+        title: "Development of municipal web portal with AI chatbot",
+        description_raw: "The City seeks a vendor to build a web portal with AI chat, CMS, accessibility.",
+        authority: "City of Rivertown",
+        country: "HR",
+        deadline_iso: new Date(Date.now() + 1000*60*60*24*21).toISOString(),
+        cpv_codes: ["72000000","72200000"],
+        url: "https://ted.europa.eu/notice/1234",
+        relevance_score: 88
+      },
+      {
+        source: "E-nabava",
+        title: "Mobile app for public transport (Android/iOS)",
+        description_raw: "Cross-platform mobile app + admin portal.",
+        authority: "Public Transport Authority",
+        country: "BA",
+        deadline_iso: new Date(Date.now() + 1000*60*60*24*14).toISOString(),
+        cpv_codes: ["72400000"],
+        url: "https://example.gov/pt-app",
+        relevance_score: 76
+      }
+    ];
+    await Tender.deleteMany({});
+    await Tender.insertMany(data);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "seed failed" });
+  }
 });
 
-// ✅ List tenders with scoring (uses last company)
-router.get('/', async (_req, res) => {
-  const company = await Company.findOne().sort({ createdAt: -1 });
-  const tenders = await Tender.find().sort({ createdAt: -1 }).limit(100);
-
-  const list = tenders.map(t => {
-    if (company) {
-      const { score, reasons } = scoreTenderForCompany(t, company);
-      return { ...t.toObject(), relevance_score: score, matched_reasons: reasons };
-    }
-    return t;
-  }).sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
-
-  res.json(list);
+// List
+router.get("/", async (_req, res) => {
+  try {
+    const items = await Tender.find({}).sort({ relevance_score: -1 }).lean();
+    res.json(items);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "list failed" });
+  }
 });
 
-// ✅ Get tender detail
-router.get('/:id', async (req, res) => {
-  const t = await Tender.findById(req.params.id);
-  if (!t) return res.status(404).json({ error: 'not found' });
-  res.json(t);
+// Detail
+router.get("/:id", async (req, res) => {
+  try {
+    const it = await Tender.findById(req.params.id).lean();
+    if (!it) return res.status(404).json({ message: "not found" });
+    res.json(it);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "detail failed" });
+  }
 });
 
 module.exports = router;
