@@ -51,21 +51,31 @@ async function ensurePaid(req, res, next) {
  * POST /api/ai-tender/draft
  *
  * - DOES NOT REQUIRE company_id
- * - Optionally uses company_id if provided, but never fails if it's missing
+ * - Accepts multiple possible field names, very tolerant:
+ *   requirements, tender_text, text, body, content, requirementsText
+ * - If nothing provided, still returns a generic proposal instead of 400
  *
- * body: { requirements: string, extraInstructions?: string, company_id?: string }
+ * body: { requirements?: string, extraInstructions?: string, company_id?: string, ... }
  */
 router.post("/draft", async (req, res) => {
   try {
-    const { requirements, extraInstructions, company_id } = req.body || {};
+    const {
+      requirements,
+      extraInstructions,
+      tender_text,
+      text,
+      body,
+      content,
+      requirementsText,
+      company_id,
+    } = req.body || {};
 
-    if (!requirements || !requirements.trim()) {
-      return res
-        .status(400)
-        .json({ message: "requirements field is required." });
-    }
+    // Try all possible keys to find "the tender text"
+    const rawRequirements =
+      [requirements, tender_text, text, body, content, requirementsText]
+        .filter((v) => typeof v === "string" && v.trim().length > 0)[0] || "";
 
-    // Try to enrich with company, but don't fail if anything goes wrong
+    // Optional company enrichment (never fails hard)
     let company = null;
     if (company_id) {
       try {
@@ -95,6 +105,11 @@ Keywords exclude: N/A
 Languages: English
 `;
 
+    // If we truly got no tender text at all, still produce a generic proposal
+    const requirementsText =
+      rawRequirements ||
+      "The contracting authority is looking for a digital services partner to design, build and maintain modern solutions for public sector stakeholders.";
+
     const prompt = `
 You are Lucius Tender AI, a senior proposal writer.
 
@@ -102,7 +117,7 @@ Create a professional proposal draft based on:
 
 TENDER REQUIREMENTS:
 """
-${requirements}
+${requirementsText}
 """
 
 EXTRA INSTRUCTIONS:
@@ -136,9 +151,9 @@ Limit length to about 1,000–1,800 words.
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = completion.choices?.[0]?.message?.content || "";
+    const textOut = completion.choices?.[0]?.message?.content || "";
 
-    return res.json({ draft: text });
+    return res.json({ draft: textOut });
   } catch (e) {
     console.error("AI draft error (/draft):", e);
     return res.status(500).json({ message: "AI drafting failed." });
