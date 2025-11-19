@@ -1,78 +1,122 @@
 // routes/tenders.js
-const router = require("express").Router();
-const Tender = require("../models/Tender");
-const Company = require("../models/Company");
-const { scoreTender } = require("../utils/score");
+const express = require("express");
+const router = express.Router();
+const mongoose = require("mongoose");
 
-// Seed demo tenders (idempotent)
-router.post("/seed", async (_req, res) => {
+// Lazy-load Tender model (avoids OverwriteModelError on Render)
+const Tender = mongoose.models.Tender || require("../models/Tender");
+
+/**
+ * GET /api/tenders/matching
+ *
+ * For now this is a SAFE, SIMPLE implementation for demo:
+ * - Returns the latest tenders from Mongo (if any)
+ * - Never crashes on missing data
+ */
+router.get("/matching", async (_req, res) => {
   try {
-    const count = await Tender.countDocuments();
-    if (count > 0) return res.json({ ok: true, already: true });
+    const tenders = await Tender.find({})
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean()
+      .exec();
 
-    await Tender.insertMany([
+    return res.json({ tenders });
+  } catch (err) {
+    console.error("matching tenders error:", err);
+    return res.status(500).json({ message: "tender error" });
+  }
+});
+
+/**
+ * GET /api/tenders/:id
+ * Used by the TenderDetail page.
+ */
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid tender id" });
+    }
+
+    const tender = await Tender.findById(id).lean().exec();
+    if (!tender) {
+      return res.status(404).json({ message: "Tender not found" });
+    }
+
+    return res.json(tender);
+  } catch (err) {
+    console.error("get tender by id error:", err);
+    return res.status(500).json({ message: "tender error" });
+  }
+});
+
+/**
+ * GET /api/tenders/demo-seed
+ *
+ * Helper route so you can quickly populate the DB
+ * with 3 example tenders for demo purposes.
+ *
+ * Call once in browser:
+ *   https://lucius-ai.onrender.com/api/tenders/demo-seed
+ */
+router.get("/demo-seed", async (_req, res) => {
+  try {
+    const count = await Tender.countDocuments().exec();
+    if (count > 0) {
+      return res.json({
+        ok: true,
+        alreadySeeded: true,
+        count,
+      });
+    }
+
+    const now = new Date();
+    const inDays = (d) => new Date(now.getTime() + d * 24 * 60 * 60 * 1000);
+
+    const docs = await Tender.insertMany([
       {
-        source: "TED",
-        title: "Development of municipal web portal with AI chatbot",
+        title: "Municipal Smart City Portal with AI Assistant",
+        short_description:
+          "Design, build and maintain a public-facing portal with multilingual AI chatbot and integrations.",
         description_raw:
-          "The City seeks a vendor to build a web portal with AI chat, CMS, accessibility, and integrations.",
-        authority: "City of Example",
-        country: "DE",
-        deadline_iso: new Date(Date.now() + 1000 * 3600 * 24 * 21).toISOString(),
-        cpv_codes: ["72000000", "72400000"],
-        url: "https://ted.europa.eu/portal",
+          "The contracting authority seeks a partner to deliver a modern smart city web portal with AI assistant, citizen tickets, and integrations to existing back-office systems.",
+        country: "BA",
+        deadline: inDays(18),
+        budget: "€250,000 – €400,000",
+        match_score: 92,
       },
       {
-        source: "eNabava",
-        title: "Mobile app + web CMS for cultural events",
+        title: "Cloud Migration & Managed Services Framework",
+        short_description:
+          "Multi-year framework for migration to cloud and DevOps services for public agencies.",
         description_raw:
-          "Tourist board requests design and development of mobile apps (iOS/Android) plus a CMS.",
-        authority: "Tourist Board",
-        country: "HR",
-        deadline_iso: new Date(Date.now() + 1000 * 3600 * 24 * 35).toISOString(),
-        cpv_codes: ["72200000", "72400000"],
-        url: "https://example.hr/tender",
+          "Framework agreement for cloud migration, DevOps, monitoring, and ongoing support for 15+ government entities.",
+        country: "DE",
+        deadline: inDays(30),
+        budget: "€1M – €3M over 4 years",
+        match_score: 78,
+      },
+      {
+        title: "AI Chatbot for Tax Administration Contact Centre",
+        short_description:
+          "AI assistant for citizen FAQs, integrated with knowledge base and ticketing system.",
+        description_raw:
+          "The tax administration is procuring an AI-based chatbot and knowledge base solution to answer citizen questions and reduce inbound call volume.",
+        country: "AT",
+        deadline: inDays(10),
+        budget: "€150,000 – €250,000",
+        match_score: 86,
       },
     ]);
 
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ message: "seed error" });
-  }
-});
-
-// List tenders, scored for the latest company
-router.get("/", async (_req, res) => {
-  try {
-    const tenders = await Tender.find().sort({ createdAt: -1 }).lean();
-    const company = await Company.findOne({ active: true }).sort({
-      updatedAt: -1,
+    return res.json({
+      ok: true,
+      seeded: docs.length,
     });
-
-    const out = tenders.map(t => ({
-      ...t,
-      relevance_score: scoreTender(t, company),
-    }));
-
-    return res.json(out);
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ message: "tenders error" });
-  }
-});
-
-router.get("/:id", async (req, res) => {
-  try {
-    const t = await Tender.findById(req.params.id).lean();
-    if (!t) return res.status(404).json({ message: "not found" });
-    const company = await Company.findOne({ active: true }).sort({
-      updatedAt: -1,
-    });
-    const relevance_score = scoreTender(t, company);
-    return res.json({ ...t, relevance_score });
-  } catch (e) {
-    console.error(e);
+  } catch (err) {
+    console.error("demo-seed error:", err);
     return res.status(500).json({ message: "tender error" });
   }
 });
