@@ -33,7 +33,7 @@ const DEFAULT_WHITELIST = [
 const fromEnvSingle = (process.env.FRONTEND_ORIGIN || "").trim();
 const fromEnvMany = (process.env.FRONTEND_ORIGINS || "")
   .split(",")
-  .map(s => s.trim())
+  .map((s) => s.trim())
   .filter(Boolean);
 
 const ALLOWLIST = Array.from(
@@ -103,11 +103,13 @@ if (!process.env.MONGO_URI) {
 mongoose
   .connect(process.env.MONGO_URI, { autoIndex: true })
   .then(() => console.log("MongoDB Connected"))
-  .catch(err => console.error("MongoDB error:", err));
+  .catch((err) => console.error("MongoDB error:", err));
 
 // Health
 app.get("/health", (_req, res) =>
-  res.status(200).json({ status: "ok", message: "Lucius AI backend is healthy." })
+  res
+    .status(200)
+    .json({ status: "ok", message: "Lucius AI backend is healthy." })
 );
 
 // Public limiter
@@ -126,6 +128,7 @@ app.use("/api/company", require("./routes/company"));
 app.use("/api/tenders", require("./routes/tenders"));
 app.use("/api/ai-tender", require("./routes/tender-ai"));
 app.use("/api/payments", require("./routes/payments"));
+app.use("/api/tender", require("./routes/tender-copilot")); // NEW: Tender Copilot (PDF → analysis → proposal)
 
 // 404
 app.use("/api", (_req, res) => res.status(404).json({ message: "Not found" }));
@@ -136,11 +139,14 @@ app.use((err, _req, res, _next) => {
   console.error("Unhandled error:", err?.stack || err?.message || err);
   res.status(500).json({
     message: "Server error",
-    detail: process.env.NODE_ENV === "production" ? undefined : String(err),
+    detail:
+      process.env.NODE_ENV === "production" ? undefined : String(err),
   });
 });
 /* eslint-enable no-unused-vars */
 
 app.listen(PORT, () => {
-  console.log(`Server listening at http://localhost:${PORT} or on Render`);
+  console.log(
+    `Server listening at http://localhost:${PORT} or on Render`
+  );
 });
