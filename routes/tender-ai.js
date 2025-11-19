@@ -13,12 +13,12 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 /**
  * PAYWALL GUARD
- * - Draft generation requires paid company (has stripe_customer_id)
- *   OR PAYWALL_FREE=1 (for testing).
+ * - Used only for /generate (DB tenders, more advanced flow)
+ * - Draft endpoint (/draft) is open for now so you can demo freely
  */
 async function ensurePaid(req, res, next) {
   try {
-    // Bypass paywall if explicitly enabled for testing
+    // For testing/demo you can still bypass everything with PAYWALL_FREE=1
     if (String(process.env.PAYWALL_FREE || "") === "1") return next();
 
     const companyId = req.body?.company_id || req.query?.company_id;
@@ -47,13 +47,17 @@ async function ensurePaid(req, res, next) {
 }
 
 /**
- * BACKWARD-COMPAT:
+ * 🔓 DEMO-FRIENDLY:
  * POST /api/ai-tender/draft
+ *
+ * - DOES NOT REQUIRE company_id
+ * - Optionally uses company_id if provided, but never fails if it's missing
+ *
  * body: { requirements: string, extraInstructions?: string, company_id?: string }
  */
-router.post("/draft", ensurePaid, async (req, res) => {
+router.post("/draft", async (req, res) => {
   try {
-    const { requirements, extraInstructions } = req.body || {};
+    const { requirements, extraInstructions, company_id } = req.body || {};
 
     if (!requirements || !requirements.trim()) {
       return res
@@ -61,7 +65,16 @@ router.post("/draft", ensurePaid, async (req, res) => {
         .json({ message: "requirements field is required." });
     }
 
-    const company = req.company;
+    // Try to enrich with company, but don't fail if anything goes wrong
+    let company = null;
+    if (company_id) {
+      try {
+        company = await Company.findById(company_id);
+      } catch (err) {
+        console.warn("Optional company lookup failed in /draft:", err?.message);
+      }
+    }
+
     const companyBrief = company
       ? `
 Company: ${company.company_name || "N/A"}
@@ -72,7 +85,15 @@ Keywords include: ${(company.keywords_include || []).join(", ") || "N/A"}
 Keywords exclude: ${(company.keywords_exclude || []).join(", ") || "N/A"}
 Languages: ${(company.languages || []).join(", ") || "N/A"}
 `
-      : "No detailed company profile available.";
+      : `
+Company: Unspecified vendor (generic IT / consulting)
+Website: N/A
+Countries: N/A
+CPV: N/A
+Keywords include: N/A
+Keywords exclude: N/A
+Languages: English
+`;
 
     const prompt = `
 You are Lucius Tender AI, a senior proposal writer.
@@ -126,6 +147,8 @@ Limit length to about 1,000–1,800 words.
 
 /**
  * POST /api/ai-tender/generate
+ * - More advanced flow, still paywalled using ensurePaid
+ *
  * body: { tender_text?: string, tender_id?: string, company_id: string, persona?: string }
  * returns: { draft, sections, meta }
  */
