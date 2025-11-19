@@ -66,13 +66,13 @@ router.post("/draft", async (req, res) => {
       text,
       body,
       content,
-      requirementsText,
+      requirementsText: requirementsTextFromBody,
       company_id,
     } = req.body || {};
 
     // Try all possible keys to find "the tender text"
     const rawRequirements =
-      [requirements, tender_text, text, body, content, requirementsText]
+      [requirements, tender_text, text, body, content, requirementsTextFromBody]
         .filter((v) => typeof v === "string" && v.trim().length > 0)[0] || "";
 
     // Optional company enrichment (never fails hard)
@@ -106,7 +106,7 @@ Languages: English
 `;
 
     // If we truly got no tender text at all, still produce a generic proposal
-    const requirementsText =
+    const finalRequirementsText =
       rawRequirements ||
       "The contracting authority is looking for a digital services partner to design, build and maintain modern solutions for public sector stakeholders.";
 
@@ -117,7 +117,7 @@ Create a professional proposal draft based on:
 
 TENDER REQUIREMENTS:
 """
-${requirementsText}
+${finalRequirementsText}
 """
 
 EXTRA INSTRUCTIONS:
