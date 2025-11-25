@@ -298,36 +298,15 @@ router.post("/generate", ensurePaid, async (req, res) => {
     "Website: " + (c.website || "N/A") + "\n" +
     "Countries: " + ((c.countries || []).join(", ") || "N/A") + "\n" +
     "CPV: " + ((c.cpv_codes || []).join(", ") || "N/A") + "\n" +
-    "Include: " + ((c.keywords_include || []).join(", ") || "N/A") + "\n" +
-    "Exclude: " + ((c.keywords_exclude || []).join(", ") || "N/A") + "\n" +
-    "Languages: " + ((c.languages || []).join(", ") || "N/A") + "\n" +
-    "Contact Emails: " + ((c.contact_emails || []).join(", ") || "N/A");
-
-    const sys = `You are a senior proposal writer.Write concise, persuasive tenders with clear sections:
-      1. Executive Summary
-      2. Understanding of Requirements
-      3. Technical Approach & Methodology
-      4. Team & Relevant Experience
-      5. Timeline
-      6. Pricing(range or model)
-      7. Compliance Matrix(short)
-      8. Risks & Mitigations
-      9. Closing & Next Steps
-
-      Tone: confident, specific, verifiable.Avoid fluff.`;
-
-    const userPrompt = `
-TENDER TEXT:
-      """
-${ inputText }
+${inputText}
       """
 
 COMPANY PROFILE:
       """
-${ companyBrief }
+${companyBrief}
       """
 
-      Persona(optional): ${ persona || "general B2B IT vendor" }
+      Persona(optional): ${persona || "general B2B IT vendor"}
 
       TASK:
 Write a complete draft proposal tailored to the tender text and company profile.
@@ -344,40 +323,49 @@ Return JSON with:
 Keep it 1,000â€“1, 800 words, concrete and tender - specific.
 `;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.3,
-      messages: [
-        { role: "system", content: sys},
-        { role: "user", content: userPrompt},
-      ],});
-
-    const raw = completion?.choices?.[0]?.message?.content || "";
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);} catch {
-      // If model returned plain text, wrap it
-      parsed = {
-        title: "Proposal Draft",
-        sections: [{ heading: "Draft", content: raw}],
-        closing: "",};}
-
-    const fullText = [
-      `# ${ parsed.title || "Proposal Draft" } `,
-      ...(parsed.sections || []).map(
-        (s) => `\n## ${ s.heading } \n\n${ s.content } `
-      ),
-      parsed.closing ? `\n\n${ parsed.closing } ` : "",
-    ].join("\n");
-
-    res.json({
-      draft: fullText,
-      sections: parsed.sections || [],
-      meta: {
+      const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        company_id: c._id,},});} catch (e) {
-    console.error("generate draft error:", e);
-    res.status(500).json({ message: "AI generation failed."});}});
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: sys },
+          { role: "user", content: userPrompt },
+        ],
+      });
+
+      const raw = completion?.choices?.[0]?.message?.content || "";
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        // If model returned plain text, wrap it
+        parsed = {
+          title: "Proposal Draft",
+          sections: [{ heading: "Draft", content: raw }],
+          closing: "",
+        };
+      }
+
+      const fullText = [
+        `# ${parsed.title || "Proposal Draft"} `,
+        ...(parsed.sections || []).map(
+          (s) => `\n## ${s.heading} \n\n${s.content} `
+        ),
+        parsed.closing ? `\n\n${parsed.closing} ` : "",
+      ].join("\n");
+
+      res.json({
+        draft: fullText,
+        sections: parsed.sections || [],
+        meta: {
+          model: "gpt-4o-mini",
+          company_id: c._id,
+        },
+      });
+    } catch (e) {
+      console.error("generate draft error:", e);
+      res.status(500).json({ message: "AI generation failed." });
+    }
+  });
 
 module.exports = router;
 
