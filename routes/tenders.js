@@ -13,18 +13,35 @@ const Tender = mongoose.models.Tender || require("../models/Tender");
  * - Returns the latest tenders from Mongo (if any)
  * - Never crashes on missing data
  */
+const { fetchRealTenders } = require("../services/tendersProvider");
+
+/**
+ * GET /api/tenders/matching
+ *
+ * Returns real tenders from UK Contracts Finder (via RSS)
+ * mixed with any local DB tenders.
+ */
 router.get("/matching", async (_req, res) => {
   try {
-    const tenders = await Tender.find({})
+    // 1. Fetch real tenders
+    const realTenders = await fetchRealTenders();
+
+    // 2. Fetch local DB tenders (if any)
+    const dbTenders = await Tender.find({})
       .sort({ createdAt: -1 })
-      .limit(50)
+      .limit(10)
       .lean()
       .exec();
 
-    return res.json({ tenders });
+    // 3. Combine (Real first)
+    const combined = [...realTenders, ...dbTenders];
+
+    return res.json({ tenders: combined });
   } catch (err) {
-    console.error("matching tenders error:", err);
-    return res.status(500).json({ message: "tender error" });
+    console.error("[Error] Failed to fetch matching tenders:", err);
+    return res.status(500).json({
+      message: "Unable to load tenders at this time. Please try again later."
+    });
   }
 });
 
@@ -75,41 +92,33 @@ router.get("/demo-seed", async (_req, res) => {
     const now = new Date();
     const inDays = (d) => new Date(now.getTime() + d * 24 * 60 * 60 * 1000);
 
-    const docs = await Tender.insertMany([
-      {
-        title: "Municipal Smart City Portal with AI Assistant",
-        short_description:
-          "Design, build and maintain a public-facing portal with multilingual AI chatbot and integrations.",
-        description_raw:
-          "The contracting authority seeks a partner to deliver a modern smart city web portal with AI assistant, citizen tickets, and integrations to existing back-office systems.",
-        country: "BA",
-        deadline: inDays(18),
-        budget: "€250,000 – €400,000",
-        match_score: 92,
-      },
-      {
-        title: "Cloud Migration & Managed Services Framework",
-        short_description:
-          "Multi-year framework for migration to cloud and DevOps services for public agencies.",
-        description_raw:
-          "Framework agreement for cloud migration, DevOps, monitoring, and ongoing support for 15+ government entities.",
-        country: "DE",
-        deadline: inDays(30),
-        budget: "€1M – €3M over 4 years",
-        match_score: 78,
-      },
-      {
-        title: "AI Chatbot for Tax Administration Contact Centre",
-        short_description:
-          "AI assistant for citizen FAQs, integrated with knowledge base and ticketing system.",
-        description_raw:
-          "The tax administration is procuring an AI-based chatbot and knowledge base solution to answer citizen questions and reduce inbound call volume.",
-        country: "AT",
-        deadline: inDays(10),
-        budget: "€150,000 – €250,000",
-        match_score: 86,
-      },
-    ]);
+    // Fetch real tenders for seeding
+    const realTenders = await fetchRealTenders();
+
+    // Take top 3 real tenders, or fallback to hardcoded if fetch fails
+    let tendersToInsert = realTenders.slice(0, 3).map(t => ({
+      ...t,
+      match_score: Math.floor(Math.random() * 15) + 80 // High score for demo
+    }));
+
+    if (tendersToInsert.length === 0) {
+      // Fallback if RSS fails
+      const inDays = (d) => new Date(now.getTime() + d * 24 * 60 * 60 * 1000);
+      tendersToInsert = [
+        {
+          title: "Municipal Smart City Portal with AI Assistant",
+          short_description: "Design, build and maintain a public-facing portal with multilingual AI chatbot and integrations.",
+          description_raw: "The contracting authority seeks a partner to deliver a modern smart city web portal with AI assistant, citizen tickets, and integrations to existing back-office systems.",
+          country: "BA",
+          deadline: inDays(18),
+          budget: "€250,000 – €400,000",
+          match_score: 92,
+        },
+        // ... (keep other fallbacks if desired, or just one is enough)
+      ];
+    }
+
+    const docs = await Tender.insertMany(tendersToInsert);
 
     return res.json({
       ok: true,

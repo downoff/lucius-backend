@@ -251,20 +251,6 @@ Write a structured response with:
 3. Technical Approach
 4. Team & Relevant Experience
 5. Project Plan & Timeline
-6. Quality & Risk Management
-7. Pricing Approach (model-only, no exact numbers)
-8. Compliance Statement
-9. Closing
-
-Tone: confident, specific, public-sector appropriate, no generic fluff.
-Limit length to about 1,000–1,800 words.
-`;
-
-    try {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0.3,
-        messages: [{ role: "user", content: prompt }],
       });
 
       const textOut = completion.choices?.[0]?.message?.content || "";
@@ -321,55 +307,55 @@ router.post("/generate", ensurePaid, async (req, res) => {
 
     const c = req.company; // from ensurePaid
     const companyBrief = `
-Company: ${c.company_name || "N/A"}
-Website: ${c.website || "N/A"}
-Countries: ${(c.countries || []).join(", ") || "N/A"}
-CPV: ${(c.cpv_codes || []).join(", ") || "N/A"}
-Include: ${(c.keywords_include || []).join(", ") || "N/A"}
-Exclude: ${(c.keywords_exclude || []).join(", ") || "N/A"}
-Languages: ${(c.languages || []).join(", ") || "N/A"}
-Contact Emails: ${(c.contact_emails || []).join(", ") || "N/A"}
-`;
+    Company: ${ c.company_name || "N/A" }
+    Website: ${ c.website || "N/A" }
+    Countries: ${ (c.countries || []).join(", ") || "N/A" }
+    CPV: ${ (c.cpv_codes || []).join(", ") || "N/A" }
+    Include: ${ (c.keywords_include || []).join(", ") || "N/A" }
+    Exclude: ${ (c.keywords_exclude || []).join(", ") || "N/A" }
+    Languages: ${ (c.languages || []).join(", ") || "N/A" }
+Contact Emails: ${ (c.contact_emails || []).join(", ") || "N/A" }
+    `;
 
-    const sys = `You are a senior proposal writer. Write concise, persuasive tenders with clear sections:
-1. Executive Summary
-2. Understanding of Requirements
-3. Technical Approach & Methodology
-4. Team & Relevant Experience
-5. Timeline
-6. Pricing (range or model)
-7. Compliance Matrix (short)
-8. Risks & Mitigations
-9. Closing & Next Steps
+    const sys = `You are a senior proposal writer.Write concise, persuasive tenders with clear sections:
+    1. Executive Summary
+    2. Understanding of Requirements
+    3. Technical Approach & Methodology
+    4. Team & Relevant Experience
+    5. Timeline
+    6. Pricing(range or model)
+    7. Compliance Matrix(short)
+    8. Risks & Mitigations
+    9. Closing & Next Steps
 
-Tone: confident, specific, verifiable. Avoid fluff.`;
+    Tone: confident, specific, verifiable.Avoid fluff.`;
 
     const userPrompt = `
 TENDER TEXT:
-"""
-${inputText}
-"""
+    """
+${ inputText }
+    """
 
 COMPANY PROFILE:
-"""
-${companyBrief}
-"""
+    """
+${ companyBrief }
+    """
 
-Persona (optional): ${persona || "general B2B IT vendor"}
+    Persona(optional): ${ persona || "general B2B IT vendor" }
 
-TASK:
+    TASK:
 Write a complete draft proposal tailored to the tender text and company profile.
 Return JSON with:
-{
-  "title": "string",
-  "sections": [
-    {"heading": "Executive Summary", "content": "..." },
-    ...
+    {
+      "title": "string",
+        "sections": [
+          { "heading": "Executive Summary", "content": "..." },
+          ...
   ],
-  "closing": "short closing paragraph"
-}
+          "closing": "short closing paragraph"
+    }
 
-Keep it 1,000–1,800 words, concrete and tender-specific.
+Keep it 1,000–1, 800 words, concrete and tender - specific.
 `;
 
     const completion = await openai.chat.completions.create({
@@ -395,11 +381,11 @@ Keep it 1,000–1,800 words, concrete and tender-specific.
     }
 
     const fullText = [
-      `# ${parsed.title || "Proposal Draft"}`,
+      `# ${ parsed.title || "Proposal Draft" } `,
       ...(parsed.sections || []).map(
-        (s) => `\n## ${s.heading}\n\n${s.content}`
+        (s) => `\n## ${ s.heading } \n\n${ s.content } `
       ),
-      parsed.closing ? `\n\n${parsed.closing}` : "",
+      parsed.closing ? `\n\n${ parsed.closing } ` : "",
     ].join("\n");
 
     res.json({
