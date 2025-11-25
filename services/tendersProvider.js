@@ -52,9 +52,6 @@ async function fetchRealTenders() {
 }
 
 // ===== STUB FUNCTIONS FOR OTHER REGIONS =====
-// These are placeholder functions that return sample data
-// Real implementations would integrate with regional procurement portals
-
 function generateStubTenders(region, count = 5) {
     const regionData = {
         "DACH": {
@@ -141,18 +138,15 @@ function generateStubTenders(region, count = 5) {
 
 // ===== MAIN FUNCTION: FETCH TENDERS BY REGION =====
 async function fetchTendersByRegion(region = "UK") {
-    // Validate region
     if (!SupportedRegions.includes(region)) {
         console.warn(`Unsupported region: ${region}. Falling back to UK.`);
         region = "UK";
     }
 
-    // UK has real data
     if (region === "UK") {
         return await fetchRealTenders();
     }
 
-    // Other regions use stub data (cached)
     const now = Date.now();
     if (cachedTenders[region]?.length > 0 && now - (lastFetch[region] || 0) < CACHE_TTL) {
         return cachedTenders[region];
