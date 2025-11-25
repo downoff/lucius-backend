@@ -28,6 +28,7 @@ const DEFAULT_WHITELIST = [
   "https://www.ailucius.com",
   "http://localhost:5173",
   "http://localhost:5174",
+  "https://lucius-frontend.onrender.com", // Add your Render frontend URL here
 ];
 
 const fromEnvSingle = (process.env.FRONTEND_ORIGIN || "").trim();
@@ -112,14 +113,24 @@ app.get("/health", (_req, res) =>
     .json({ status: "ok", message: "Lucius AI backend is healthy." })
 );
 
-// Public limiter
+// Public limiter (stricter)
 const publicApiLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 60,
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later." }
+});
+app.use("/api/public", publicApiLimiter);
+
+// General API limiter (protects AI endpoints)
+const generalApiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use("/api/public", publicApiLimiter);
+app.use("/api", generalApiLimiter);
 
 // ===== ROUTES (ALL RELATIVE PATHS) =====
 app.use("/api/public", require("./routes/marketing"));

@@ -175,9 +175,14 @@ router.post("/draft", async (req, res) => {
     } = req.body || {};
 
     // Try all possible keys to find "the tender text"
-    const rawRequirements =
+    let rawRequirements =
       [requirements, tender_text, text, body, content, requirementsTextFromBody]
         .filter((v) => typeof v === "string" && v.trim().length > 0)[0] || "";
+
+    // Sanitize input (basic)
+    if (rawRequirements.length > 50000) {
+      rawRequirements = rawRequirements.substring(0, 50000); // Truncate overly long inputs
+    }
 
     // Optional company enrichment (never fails hard)
     let company = null;
