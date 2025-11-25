@@ -135,12 +135,15 @@ app.use("/api", (_req, res) => res.status(404).json({ message: "Not found" }));
 
 // Errors
 /* eslint-disable no-unused-vars */
-app.use((err, _req, res, _next) => {
-  console.error("Unhandled error:", err?.stack || err?.message || err);
+app.use((err, req, res, _next) => {
+  const timestamp = new Date().toISOString();
+  console.error(`[${timestamp}] Error in ${req.method} ${req.url}:`);
+  console.error(err?.stack || err?.message || err);
+
   res.status(500).json({
     message: "Server error",
-    detail:
-      process.env.NODE_ENV === "production" ? undefined : String(err),
+    requestId: req.headers['x-request-id'] || Date.now().toString(),
+    detail: process.env.NODE_ENV === "production" ? undefined : String(err),
   });
 });
 /* eslint-enable no-unused-vars */
