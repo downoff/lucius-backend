@@ -9,7 +9,7 @@ const Company = mongoose.models.Company || require("../models/Company");
 const Tender = mongoose.models.Tender || require("../models/Tender");
 
 // Init OpenAI client (might not have key in demo)
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || ""});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 
 function buildFallbackDraft(finalRequirementsText, companyBrief) {
   return `
@@ -114,7 +114,8 @@ The Lucius AI Tender Copilot Team
 **Company Profile (summary used for tailoring):**
 
 ${companyBrief}
-`.trim();}
+`.trim();
+}
 
 /**
  * PAYWALL GUARD
@@ -128,21 +129,28 @@ async function ensurePaid(req, res, next) {
 
     const companyId = req.body?.company_id || req.query?.company_id;
     if (!companyId) {
-      return res.status(400).json({ message: "company_id required."});}
+      return res.status(400).json({ message: "company_id required." });
+    }
 
     const company = await Company.findById(companyId);
     if (!company) {
-      return res.status(404).json({ message: "Company not found."});}
+      return res.status(404).json({ message: "Company not found." });
+    }
 
     if (!company.stripe_customer_id) {
       return res.status(402).json({
         message: "Payment required. Please subscribe to generate drafts.",
-        code: "PAYWALL",});}
+        code: "PAYWALL",
+      });
+    }
 
     req.company = company;
-    next();} catch (e) {
+    next();
+  } catch (e) {
     console.error("ensurePaid error:", e);
-    res.status(500).json({ message: "Server error (paywall)."});}}
+    res.status(500).json({ message: "Server error (paywall)." });
+  }
+}
 
 /**
  * ðŸ”“ DEMO-FRIENDLY:
@@ -163,7 +171,7 @@ router.post("/draft", async (req, res) => {
       body,
       content,
       requirementsText: requirementsTextFromBody,
-      company_id,} = req.body || {};
+      company_id, } = req.body || {};
 
     // Try all possible keys to find "the tender text"
     let rawRequirements =
@@ -174,15 +182,18 @@ router.post("/draft", async (req, res) => {
     if (rawRequirements.length > 50000) {
       rawRequirements = rawRequirements.substring(0, 50000); // Truncate overly long inputs}
 
-    // Optional company enrichment (never fails hard)
-    let company = null;
-    if (company_id) {
-      try {
-        company = await Company.findById(company_id);} catch (err) {
-        console.warn("Optional company lookup failed in /draft:", err?.message);}}
+      // Optional company enrichment (never fails hard)
+      let company = null;
+      if (company_id) {
+        try {
+          company = await Company.findById(company_id);
+        } catch (err) {
+          console.warn("Optional company lookup failed in /draft:", err?.message);
+        }
+      }
 
-    const companyBrief = company
-      ? `
+      const companyBrief = company
+        ? `
 Company: ${company.company_name || "N/A"}
 Website: ${company.website || "N/A"}
 Countries: ${(company.countries || []).join(", ") || "N/A"}
@@ -191,7 +202,7 @@ Keywords include: ${(company.keywords_include || []).join(", ") || "N/A"}
 Keywords exclude: ${(company.keywords_exclude || []).join(", ") || "N/A"}
 Languages: ${(company.languages || []).join(", ") || "N/A"}
 `
-      : `
+        : `
 Company: Unspecified vendor (generic IT / consulting)
 Website: N/A
 Countries: N/A
@@ -201,17 +212,18 @@ Keywords exclude: N/A
 Languages: English
 `;
 
-    // If we truly got no tender text at all, still produce a generic proposal
-    const finalRequirementsText =
-      rawRequirements ||
-      "The contracting authority is looking for a digital services partner to design, build and maintain modern solutions for public sector stakeholders.";
+      // If we truly got no tender text at all, still produce a generic proposal
+      const finalRequirementsText =
+        rawRequirements ||
+        "The contracting authority is looking for a digital services partner to design, build and maintain modern solutions for public sector stakeholders.";
 
-    // If no OpenAI key â€“ immediately return fallback draft (no error)
-    if (!process.env.OPENAI_API_KEY) {
-      const fallback = buildFallbackDraft(finalRequirementsText, companyBrief);
-      return res.json({ draft: fallback, meta: { source: "fallback"}});}
+      // If no OpenAI key â€“ immediately return fallback draft (no error)
+      if (!process.env.OPENAI_API_KEY) {
+        const fallback = buildFallbackDraft(finalRequirementsText, companyBrief);
+        return res.json({ draft: fallback, meta: { source: "fallback" } });
+      }
 
-    const prompt = `
+      const prompt = `
 You are Lucius Tender AI, a senior proposal writer.
 
 Create a professional proposal draft based on:
@@ -281,53 +293,53 @@ router.post("/generate", ensurePaid, async (req, res) => {
         .json({ message: "Provide tender_text or tender_id."});}
 
     const c = req.company; // from ensurePaid
-    const companyBrief = `
-    Company: ${c.company_name || "N/A"}
-    Website: ${c.website || "N/A"}
-    Countries: ${(c.countries || []).join(", ") || "N/A"}
-    CPV: ${(c.cpv_codes || []).join(", ") || "N/A"}
-    Include: ${(c.keywords_include || []).join(", ") || "N/A"}
-    Exclude: ${(c.keywords_exclude || []).join(", ") || "N/A"}
-    Languages: ${(c.languages || []).join(", ") || "N/A"}
-Contact Emails: ${(c.contact_emails || []).join(", ") || "N/A"}
-    `;
+    const companyBrief = 
+    "Company: " + (c.company_name || "N/A") + "\n" +
+    "Website: " + (c.website || "N/A") + "\n" +
+    "Countries: " + ((c.countries || []).join(", ") || "N/A") + "\n" +
+    "CPV: " + ((c.cpv_codes || []).join(", ") || "N/A") + "\n" +
+    "Include: " + ((c.keywords_include || []).join(", ") || "N/A") + "\n" +
+    "Exclude: " + ((c.keywords_exclude || []).join(", ") || "N/A") + "\n" +
+    "Languages: " + ((c.languages || []).join(", ") || "N/A") + "\n" +
+    "Contact Emails: " + ((c.contact_emails || []).join(", ") || "N/A");
 
     const sys = `You are a senior proposal writer.Write concise, persuasive tenders with clear sections:
-    1. Executive Summary
-    2. Understanding of Requirements
-    3. Technical Approach & Methodology
-    4. Team & Relevant Experience
-    5. Timeline
-    6. Pricing(range or model)
-    7. Compliance Matrix(short)
-    8. Risks & Mitigations
-    9. Closing & Next Steps
+      1. Executive Summary
+      2. Understanding of Requirements
+      3. Technical Approach & Methodology
+      4. Team & Relevant Experience
+      5. Timeline
+      6. Pricing(range or model)
+      7. Compliance Matrix(short)
+      8. Risks & Mitigations
+      9. Closing & Next Steps
 
-    Tone: confident, specific, verifiable.Avoid fluff.`;
+      Tone: confident, specific, verifiable.Avoid fluff.`;
 
     const userPrompt = `
 TENDER TEXT:
-    """
-${inputText}
-    """
+      """
+${ inputText }
+      """
 
 COMPANY PROFILE:
-    """
-${companyBrief}
-    """
+      """
+${ companyBrief }
+      """
 
-    Persona(optional): ${persona || "general B2B IT vendor"}
+      Persona(optional): ${ persona || "general B2B IT vendor" }
 
-    TASK:
+      TASK:
 Write a complete draft proposal tailored to the tender text and company profile.
 Return JSON with:
-    {
-      "title": "string",
-        "sections": [
-          { "heading": "Executive Summary", "content": "..."},
-          ...
+      {
+        "title": "string",
+          "sections": [
+            { "heading": "Executive Summary", "content": "..." },
+            ...
   ],
-          "closing": "short closing paragraph"}
+            "closing": "short closing paragraph"
+      }
 
 Keep it 1,000â€“1, 800 words, concrete and tender - specific.
 `;
@@ -351,11 +363,11 @@ Keep it 1,000â€“1, 800 words, concrete and tender - specific.
         closing: "",};}
 
     const fullText = [
-      `# ${parsed.title || "Proposal Draft"} `,
+      `# ${ parsed.title || "Proposal Draft" } `,
       ...(parsed.sections || []).map(
-        (s) => `\n## ${s.heading} \n\n${s.content} `
+        (s) => `\n## ${ s.heading } \n\n${ s.content } `
       ),
-      parsed.closing ? `\n\n${parsed.closing} ` : "",
+      parsed.closing ? `\n\n${ parsed.closing } ` : "",
     ].join("\n");
 
     res.json({
