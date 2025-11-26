@@ -13,30 +13,35 @@ const Tender = mongoose.models.Tender || require("../models/Tender");
  * - Returns the latest tenders from Mongo (if any)
  * - Never crashes on missing data
  */
-const { fetchRealTenders } = require("../services/tendersProvider");
+const { fetchTendersByRegion } = require("../services/tendersProvider");
 
 /**
  * GET /api/tenders/matching
  *
- * Returns real tenders from UK Contracts Finder (via RSS)
- * mixed with any local DB tenders.
+ * Returns tenders for a specific region (defaults to UK).
+ * Query params:
+ * - region: "UK", "DACH", "FR", "EU-East", "US", "Middle-East"
  */
-router.get("/matching", async (_req, res) => {
+router.get("/matching", async (req, res) => {
   try {
-    // 1. Fetch real tenders
-    const realTenders = await fetchRealTenders();
+    const region = req.query.region || "UK";
+
+    // 1. Fetch tenders for the requested region
+    // (Real data for UK, realistic stubs for others)
+    const regionalTenders = await fetchTendersByRegion(region);
 
     // 2. Fetch local DB tenders (if any)
+    // TODO: Filter DB tenders by region once we have that field in the schema
     const dbTenders = await Tender.find({})
       .sort({ createdAt: -1 })
       .limit(10)
       .lean()
       .exec();
 
-    // 3. Combine (Real first)
-    const combined = [...realTenders, ...dbTenders];
+    // 3. Combine (Regional first)
+    const combined = [...regionalTenders, ...dbTenders];
 
-    return res.json({ tenders: combined });
+    return res.json({ tenders: combined, region });
   } catch (err) {
     console.error("[Error] Failed to fetch matching tenders:", err);
     return res.status(500).json({
