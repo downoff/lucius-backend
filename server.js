@@ -179,6 +179,7 @@ app.use("/api/tenders", require("./routes/tenders"));
 app.use("/api/ai-tender", require("./routes/tender-ai"));
 app.use("/api/payments", require("./routes/payments"));
 app.use("/api/tender", require("./routes/tender-copilot")); // NEW: Tender Copilot (PDF → analysis → proposal)
+app.use("/api/referrals", require("./routes/referrals")); // NEW: Referral program
 
 // 404
 app.use("/api", (_req, res) => res.status(404).json({ message: "Not found" }));

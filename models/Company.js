@@ -20,6 +20,12 @@ const CompanySchema = new mongoose.Schema(
     plan: { type: String, default: null }, // 'starter', etc.
     last_payment_at: { type: Date, default: null },
     stripe_customer_id: { type: String, default: null },
+
+    // Referrals
+    referral_code: { type: String, unique: true, sparse: true },
+    referrals_count: { type: Number, default: 0 },
+    referral_credits: { type: Number, default: 0 }, // in euros
+    referred_by: { type: String, default: null }, // referral code of referrer
   },
   { timestamps: true }
 );

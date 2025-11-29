@@ -1,16 +1,16 @@
-const Parser = require('rss-parser');
-const parser = new Parser();
+const { calculateMatchScore } = require("./scoring");
 
-// ===== SUPPORTED REGIONS =====
-const SupportedRegions = ["UK", "DACH", "FR", "EU-East", "US", "Middle-East"];
+// ===== DEMO PROFILE FOR SCORING =====
+// In a real app, this would come from the user's authenticated company profile.
+const DEMO_COMPANY = {
+    company_name: "TechSolutions Ltd",
+    keywords_include: ["software development", "cloud migration", "cybersecurity", "digital transformation", "AI", "data analytics"],
+    keywords_exclude: ["construction", "cleaning", "catering", "hardware supply"],
+    cpv_codes: ["72000000-5", "72200000-7"],
+    description: "A leading IT consultancy specializing in digital transformation, cloud infrastructure, and custom software development for the public sector."
+};
 
-// UK Contracts Finder RSS Feed
-const RSS_URL = "https://www.contractsfinder.service.gov.uk/Search/RSS.xml?regions=1&regions=2&regions=3&cat=12&cat=13&cat=14";
-const DEMO_RSS_URL = "https://www.contractsfinder.service.gov.uk/Search/RSS.xml?cat=12&cat=13&cat=14";
-
-let cachedTenders = {};
-let lastFetch = {};
-const CACHE_TTL = 1000 * 60 * 15; // 15 minutes
+// ... (rest of imports)
 
 // ===== UK REAL TENDER DATA =====
 async function fetchRealTenders() {
@@ -23,9 +23,19 @@ async function fetchRealTenders() {
 
     try {
         const feed = await parser.parseURL(DEMO_RSS_URL);
-        const normalized = feed.items.map(item => {
+
+        // Process tenders in parallel for scoring
+        const normalizedPromises = feed.items.slice(0, 10).map(async (item) => {
             const budgetMatch = item.content?.match(/£[\d,]+(\.\d{2})?/);
             const budget = budgetMatch ? budgetMatch[0] : "See tender docs";
+
+            // AI Scoring
+            const aiResult = await calculateMatchScore({
+                title: item.title,
+                description_raw: item.contentSnippet,
+                budget,
+                region: "UK"
+            }, DEMO_COMPANY);
 
             return {
                 _id: item.guid || item.link,
@@ -36,11 +46,14 @@ async function fetchRealTenders() {
                 region: "UK",
                 deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
                 budget: budget,
-                match_score: Math.floor(Math.random() * 30) + 70,
+                match_score: aiResult.score,
+                rationale: aiResult.rationale, // New field
                 source_url: item.link,
                 is_real: true
             };
         });
+
+        const normalized = await Promise.all(normalizedPromises);
 
         cachedTenders[region] = normalized;
         lastFetch[region] = now;
@@ -53,6 +66,7 @@ async function fetchRealTenders() {
 
 // ===== STUB FUNCTIONS FOR OTHER REGIONS =====
 function generateStubTenders(region, count = 5) {
+    // ... (keep existing stub data)
     const regionData = {
         "DACH": {
             countries: ["Germany", "Austria", "Switzerland"],
@@ -119,6 +133,10 @@ function generateStubTenders(region, count = 5) {
         const randomCountry = data.countries[Math.floor(Math.random() * data.countries.length)];
         const budget = `${data.budgetCurrency}${(Math.floor(Math.random() * 500) + 50)}k`;
 
+        // Simulate AI score for stubs (weighted towards high for demo)
+        const isHighFit = Math.random() > 0.3;
+        const score = isHighFit ? Math.floor(Math.random() * 15) + 85 : Math.floor(Math.random() * 30) + 50;
+
         tenders.push({
             _id: `stub-${region}-${Date.now()}-${i}`,
             title: randomTitle,
@@ -128,7 +146,8 @@ function generateStubTenders(region, count = 5) {
             region: region,
             deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
             budget: budget,
-            match_score: Math.floor(Math.random() * 30) + 70,
+            match_score: score,
+            rationale: isHighFit ? "Strong match with core capabilities in digital transformation." : "Partial match - requires partner for infrastructure components.",
             source_url: "#",
             is_real: false
         });
@@ -136,6 +155,8 @@ function generateStubTenders(region, count = 5) {
 
     return tenders;
 }
+
+// ... (rest of file)
 
 // ===== MAIN FUNCTION: FETCH TENDERS BY REGION =====
 async function fetchTendersByRegion(region = "UK") {

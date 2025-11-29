@@ -87,7 +87,7 @@ ${tenderText}
  */
 router.post("/proposal", async (req, res) => {
   try {
-    const { analysis, companyProfile } = req.body || {};
+    const { analysis, companyProfile, template = "standard" } = req.body || {};
 
     if (!analysis || !analysis.trim()) {
       return res.status(400).json({ error: "analysis is required." });
@@ -96,10 +96,27 @@ router.post("/proposal", async (req, res) => {
       return res.status(400).json({ error: "companyProfile is required." });
     }
 
+    let toneInstruction = "";
+    switch (template) {
+      case "persuasive":
+        toneInstruction = "Tone: Highly persuasive, sales-oriented, focusing on benefits, ROI, and 'why us'. Use strong action verbs.";
+        break;
+      case "technical":
+        toneInstruction = "Tone: Highly technical, precise, detail-oriented, focusing on methodology, architecture, and compliance. Minimize marketing fluff.";
+        break;
+      case "standard":
+      default:
+        toneInstruction = "Tone: Professional, balanced, confident, and public-sector appropriate. Clear and concise.";
+        break;
+    }
+
     const prompt = `
 You are Lucius Tender Copilot, a senior proposal writer.
 
 Use the tender analysis and company profile below to draft a structured proposal suitable for a public tender response.
+
+TEMPLATE STYLE: ${template.toUpperCase()}
+${toneInstruction}
 
 TENDER ANALYSIS:
 """
@@ -123,12 +140,12 @@ Write a proposal with these sections:
 8. Compliance Statement
 9. Closing
 
-Tone: confident, specific, tender-specific, no generic fluff. Keep it 1,000–1,800 words.
+Keep it 1,000–1,800 words.
 `;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.3,
+      model: "gpt-4o",
+      temperature: 0.4,
       messages: [{ role: "user", content: prompt }],
     });
 

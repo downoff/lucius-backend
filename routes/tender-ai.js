@@ -326,21 +326,30 @@ Languages: ${(c.languages || []).join(", ") || "N/A"}
 Contact Emails: ${(c.contact_emails || []).join(", ") || "N/A"}
 `;
 
-    const sys = `You are a senior proposal writer. Write concise, persuasive tenders with clear sections:
-1. Executive Summary
-2. Understanding of Requirements
-3. Technical Approach & Methodology
-4. Team & Relevant Experience
-5. Timeline
-6. Pricing (range or model)
-7. Compliance Matrix (short)
-8. Risks & Mitigations
-9. Closing & Next Steps
+    const sys = `You are an expert Bid Manager and Proposal Writer with 20 years of experience in public sector procurement.
+    
+Your goal is to write a winning, compliant, and highly persuasive proposal draft.
+    
+GUIDELINES:
+- **Tone**: Professional, confident, specific, and value-driven. Avoid generic marketing fluff.
+- **Structure**: Follow the standard tender response structure (Executive Summary, Understanding, Approach, etc.).
+- **Compliance**: Address the specific requirements found in the tender text.
+- **Differentiation**: Highlight the company's unique strengths (from their profile).
+- **Clarity**: Use bullet points, clear headings, and short paragraphs.
 
-Tone: confident, specific, verifiable. Avoid fluff.`;
+SECTIONS REQUIRED:
+1. **Executive Summary**: A compelling hook summarizing why we are the best choice.
+2. **Understanding of Requirements**: Demonstrate you've read and understood the specific needs.
+3. **Technical Approach & Methodology**: Concrete steps on how you will deliver the work.
+4. **Team & Relevant Experience**: Why this specific team is qualified.
+5. **Timeline & Project Plan**: A realistic high-level schedule.
+6. **Pricing Model**: Suggest a pricing approach (e.g., fixed price vs T&M) without specific numbers unless asked.
+7. **Compliance & Risk**: How you handle risks, quality, and security.
+8. **Closing**: A strong finishing statement.
+`;
 
     const userPrompt = `
-TENDER TEXT:
+TENDER CONTEXT:
 """
 ${inputText}
 """
@@ -350,26 +359,26 @@ COMPANY PROFILE:
 ${companyBrief}
 """
 
-Persona (optional): ${persona || "general B2B IT vendor"}
+PERSONA/FOCUS: ${persona || "General B2B IT Service Provider"}
 
 TASK:
-Write a complete draft proposal tailored to the tender text and company profile.
-Return JSON with:
+Write a high-quality proposal draft tailored to the above tender.
+Return a JSON object with the following structure:
 {
-  "title": "string",
+  "title": "Proposal Title",
   "sections": [
-    {"heading": "Executive Summary", "content": "..." },
-    ...
+    { "heading": "Section Title", "content": "Markdown content..." }
   ],
-  "closing": "short closing paragraph"
+  "closing": "Closing paragraph"
 }
 
-Keep it 1,000ΓÇô1,800 words, concrete and tender-specific.
+Ensure the content is substantial (total ~1,200-1,500 words) and directly references the tender requirements.
 `;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.3,
+      model: "gpt-4o",
+      temperature: 0.4,
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: sys },
         { role: "user", content: userPrompt },
@@ -381,7 +390,7 @@ Keep it 1,000ΓÇô1,800 words, concrete and tender-specific.
     try {
       parsed = JSON.parse(raw);
     } catch {
-      // If model returned plain text, wrap it
+      // Fallback if JSON parsing fails (unlikely with json_object mode)
       parsed = {
         title: "Proposal Draft",
         sections: [{ heading: "Draft", content: raw }],
@@ -401,7 +410,7 @@ Keep it 1,000ΓÇô1,800 words, concrete and tender-specific.
       draft: fullText,
       sections: parsed.sections || [],
       meta: {
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         company_id: c._id,
       },
     });
