@@ -180,6 +180,7 @@ app.use("/api/ai-tender", require("./routes/tender-ai"));
 app.use("/api/payments", require("./routes/payments"));
 app.use("/api/tender", require("./routes/tender-copilot")); // NEW: Tender Copilot (PDF → analysis → proposal)
 app.use("/api/referrals", require("./routes/referrals")); // NEW: Referral program
+app.use("/ai-tender-writing", require("./routes/seo-pages")); // PROGRAMMATIC SEO: 1,260 auto-generated pages
 
 // 404
 app.use("/api", (_req, res) => res.status(404).json({ message: "Not found" }));
