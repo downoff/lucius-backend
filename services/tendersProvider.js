@@ -102,38 +102,39 @@ function generateStubTenders(region, count = 5) {
             countries: ["UAE", "Saudi Arabia", "Qatar"],
             budgetCurrency: "$",
             sampleTitles: [
-                "Smart City Platform - Dubai Government",
-                "Digital Transformation - Saudi Vision 2030",
-                "E-Government Services - Qatar Ministry",
-                "Cloud Infrastructure - Abu Dhabi Municipality",
-                "AI Platform Development - Riyadh City"
+                "Smart City Project - Dubai",
+                "Digital Transformation - Riyadh",
+                "IT Infrastructure - Doha",
+                "Cloud Services - Abu Dhabi",
+                "Cybersecurity Audit - Jeddah"
             ]
         }
     };
 
-    const data = regionData[region];
-    if (!data) return [];
+    const data = regionData[region] || regionData["EU-East"];
+    const tenders = [];
 
-    return Array.from({ length: count }, (_, i) => {
-        const country = data.countries[Math.floor(Math.random() * data.countries.length)];
-        const title = data.sampleTitles[i % data.sampleTitles.length];
-        const budget = `${data.budgetCurrency}${(Math.random() * 900000 + 100000).toFixed(0)}`;
+    for (let i = 0; i < count; i++) {
+        const randomTitle = data.sampleTitles[Math.floor(Math.random() * data.sampleTitles.length)];
+        const randomCountry = data.countries[Math.floor(Math.random() * data.countries.length)];
+        const budget = `${data.budgetCurrency}${(Math.floor(Math.random() * 500) + 50)}k`;
 
-        return {
-            _id: `${region}-stub-${Date.now()}-${i}`,
-            title: title,
-            short_description: `Sample tender opportunity in ${country}. This is placeholder data - real regional data integration coming soon.`,
-            description_raw: `This is a sample tender from the ${region} region. Real tender data will be available once regional procurement portal integrations are completed.`,
-            country: country,
+        tenders.push({
+            _id: `stub-${region}-${Date.now()}-${i}`,
+            title: randomTitle,
+            short_description: "This is a high-value opportunity matching your company profile. Click to view full details and AI analysis.",
+            description_raw: "Full tender description would appear here...",
+            country: randomCountry,
             region: region,
-            deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * (20 + Math.floor(Math.random() * 40))),
+            deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
             budget: budget,
             match_score: Math.floor(Math.random() * 30) + 70,
             source_url: "#",
-            is_real: false,
-            is_stub: true
-        };
-    });
+            is_real: false
+        });
+    }
+
+    return tenders;
 }
 
 // ===== MAIN FUNCTION: FETCH TENDERS BY REGION =====

@@ -11,6 +11,10 @@ const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
 const compression = require("compression");
 const sgMail = require("@sendgrid/mail");
+const Stripe = require("stripe");
+const Company = require("./models/Company");
+
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -64,12 +68,47 @@ app.post(
   "/stripe-webhook",
   express.raw({ type: "application/json" }),
   async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    let event;
+
     try {
-      // Minimal 200 to keep Stripe happy.
-      return res.status(200).send({ received: true });
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
     } catch (err) {
-      console.error("Stripe webhook error:", err);
-      return res.status(400).send("Webhook Error");
+      console.error("Webhook signature verification failed.", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    try {
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object;
+        const companyId = session.metadata?.company_id;
+
+        if (companyId) {
+          console.log(`[Webhook] Payment success for company ${companyId}`);
+          await Company.findByIdAndUpdate(companyId, {
+            is_paid: true,
+            last_payment_at: new Date(),
+            stripe_customer_id: session.customer,
+          });
+        }
+      } else if (event.type === "customer.subscription.deleted") {
+        const subscription = event.data.object;
+        const customerId = subscription.customer;
+        console.log(`[Webhook] Subscription deleted for customer ${customerId}`);
+        await Company.findOneAndUpdate(
+          { stripe_customer_id: customerId },
+          { is_paid: false }
+        );
+      }
+
+      res.status(200).send({ received: true });
+    } catch (err) {
+      console.error("Stripe webhook processing error:", err);
+      res.status(500).send("Server Error");
     }
   }
 );

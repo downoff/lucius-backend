@@ -12,6 +12,8 @@ const CompanySchema = new mongoose.Schema(
     max_deadline_days: { type: Number, default: 45 },
     languages: [{ type: String }],
     contact_emails: [{ type: String }],
+    team_size: { type: String },
+    tender_volume: { type: String },
 
     // Payments/plan
     is_paid: { type: Boolean, default: false },
