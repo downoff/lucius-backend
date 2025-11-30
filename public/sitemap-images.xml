@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://luciusai.com/</loc>
+    <image:image>
+      <image:loc>https://luciusai.com/images/hero-dashboard.png</image:loc>
+      <image:title>LuciusAI Dashboard - AI Tender Writing</image:title>
+      <image:caption>Screenshot of LuciusAI tender analysis dashboard</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://luciusai.com/images/ai-proposal-generator.png</image:loc>
+      <image:title>AI-Powered Proposal Generator</image:title>
+      <image:caption>Automated tender proposal generation interface</image:caption>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://luciusai.com/pricing</loc>
+    <image:image>
+      <image:loc>https://luciusai.com/images/pricing-comparison.png</image:loc>
+      <image:title>LuciusAI Pricing Plans Comparison</image:title>
+      <image:caption>Solo, Agency, and Enterprise pricing tiers</image:caption>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://luciusai.com/how-it-works</loc>
+    <image:image>
+      <image:loc>https://luciusai.com/images/how-it-works-steps.png</image:loc>
+      <image:title>How LuciusAI Works - 3 Simple Steps</image:title>
+      <image:caption>Upload tender, AI analyzes, generate proposal</image:caption>
+    </image:image>
+  </url>
+</urlset>

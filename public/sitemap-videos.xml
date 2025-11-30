@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
+  <url>
+    <loc>https://luciusai.com/how-it-works</loc>
+    <video:video>
+      <video:thumbnail_loc>https://luciusai.com/images/video-thumb-demo.jpg</video:thumbnail_loc>
+      <video:title>LuciusAI Demo: AI Tender Writing in 30 Seconds</video:title>
+      <video:description>Watch how LuciusAI analyzes government tenders and generates compliant proposals using GPT-4o AI in under 30 seconds.</video:description>
+      <video:content_loc>https://luciusai.com/videos/luciusai-demo.mp4</video:content_loc>
+      <video:duration>90</video:duration>
+      <video:publication_date>2025-11-30</video:publication_date>
+      <video:family_friendly>yes</video:family_friendly>
+    </video:video>
+  </url>
+</urlset>
