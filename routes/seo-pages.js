@@ -55,6 +55,91 @@ const TENDER_TYPES = [
 ];
 
 /**
+ * NEW pSEO Structure: /tenders/:country/:category/:year
+ * Example: /tenders/uk/construction/2024
+ */
+router.get("/tenders/:country/:category/:year", (req, res) => {
+  const { country, category, year } = req.params;
+
+  // Format data
+  const countryText = country.toUpperCase();
+  const categoryText = category.replace(/-/g, " ");
+  const yearText = year;
+
+  const pageTitle = `${categoryText} Tenders in ${countryText} ${yearText} | LuciusAI`;
+  const metaDesc = `Find and bid on the latest ${yearText} ${categoryText} tenders in ${countryText}. AI-powered summaries, requirements analysis, and proposal writing.`;
+
+  // Generate simulated tenders
+  const recentTenders = [
+    { title: `${categoryText} Framework ${yearText}`, budget: "€500k+", deadline: "Open" },
+    { title: `National ${categoryText} Supply`, budget: "€1M - €5M", deadline: "30 days" },
+    { title: `Regional ${categoryText} Services`, budget: "€100k - €300k", deadline: "14 days" },
+    { title: `${countryText} ${categoryText} Innovation`, budget: "€250k", deadline: "21 days" },
+    { title: `Emergency ${categoryText} Provision`, budget: "€50k - €150k", deadline: "7 days" }
+  ];
+
+  const pageData = {
+    title: pageTitle,
+    metaDesc,
+    tenderType: "Government Tenders", // Generic fallback
+    industry: categoryText,
+    location: countryText,
+    year: yearText,
+    canonicalUrl: `https://www.ailucius.com/tenders/${country}/${category}/${year}`,
+    recentTenders,
+    features: [
+      { title: `Latest ${yearText} Data`, desc: `Real-time updates for ${countryText} ${categoryText} opportunities.` },
+      { title: `AI Summaries`, desc: `Get instant summaries of complex ${categoryText} tender documents.` },
+      { title: `Win Prediction`, desc: `AI scores your probability of winning ${countryText} contracts.` },
+      { title: `Automated Proposals`, desc: `Draft compliant bids for ${categoryText} in minutes.` }
+    ],
+    faqs: [
+      {
+        question: `How to find ${categoryText} tenders in ${countryText}?`,
+        answer: `LuciusAI aggregates all ${countryText} government sources. Use our AI search to find hidden ${categoryText} opportunities that match your profile.`
+      },
+      {
+        question: `What are the requirements for ${yearText} ${categoryText} bids?`,
+        answer: `Standard requirements include financial standing, technical capacity, and ${countryText}-specific certifications. LuciusAI analyzes each tender to list exact requirements.`
+      },
+      {
+        question: `Can AI write ${categoryText} proposals?`,
+        answer: `Yes. LuciusAI is trained on successful ${categoryText} proposals. It generates technical responses, executive summaries, and methodology sections automatically.`
+      },
+      {
+        question: `How much is the ${categoryText} market in ${countryText}?`,
+        answer: `The ${countryText} public sector spends billions annually on ${categoryText}. ${yearText} is projected to see increased spending in sustainable and digital initiatives.`
+      },
+      {
+        question: `How to win ${categoryText} contracts in ${countryText}?`,
+        answer: `Focus on compliance, clear value proposition, and social value. LuciusAI helps you structure your bid to score maximum points on ${countryText} evaluation criteria.`
+      },
+      {
+        question: `Is LuciusAI free for ${categoryText} tenders?`,
+        answer: `You can search and view summaries for free. Proposal generation requires a subscription, starting at €49/month.`
+      },
+      {
+        question: `What is the deadline for ${yearText} ${categoryText} frameworks?`,
+        answer: `Deadlines vary. Many ${yearText} frameworks open in Q1/Q2. Set up LuciusAI alerts to never miss a ${categoryText} deadline.`
+      },
+      {
+        question: `Do you cover private sector ${categoryText} tenders?`,
+        answer: `We primarily focus on government and public sector contracts in ${countryText}, but also cover major utility and infrastructure providers.`
+      }
+    ],
+    breadcrumbs: [
+      { name: 'Home', url: '/' },
+      { name: 'Tenders', url: '/tenders' },
+      { name: countryText, url: `/tenders/${country}` },
+      { name: categoryText, url: `/tenders/${country}/${category}` },
+      { name: yearText, url: `/tenders/${country}/${category}/${year}` }
+    ]
+  };
+
+  res.json(pageData);
+});
+
+/**
  * Generate SEO-optimized landing page for specific keyword combo
  * Example: /ai-tender-writing/it-consulting/uk
  */
