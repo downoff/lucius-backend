@@ -5,12 +5,13 @@
  * Generates fresh blog posts automatically every week using AI
  * Posts get indexed by Google → automatic SEO traffic
  * 
- * ZERO manual work - runs on schedule
+ * NOW PERSISTENT WITH MONGODB
  */
 
 const express = require('express');
 const router = express.Router();
 const OpenAI = require('openai');
+const BlogPost = require('../models/BlogPost');
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
@@ -42,33 +43,30 @@ async function generateBlogPost(topic) {
                 content: `You are an expert tender writing consultant and social media strategist.
                 
                 Task 1: Write a comprehensive, SEO-optimized blog post (1500 words).
-                Task 2: Write a LinkedIn post (professional, value-driven) promoting the blog.
-                Task 3: Write a Twitter thread (5 tweets, punchy) promoting the blog.
+                Task 2: Write a short excerpt (2 sentences).
+                Task 3: Generate SEO title and meta description.
                 
-                Output format:
-                [BLOG CONTENT MARKDOWN]
-                
-                ---
-                
-                ## 📱 Social Media Assets
-                
-                ### LinkedIn Post
-                [Content]
-                
-                ### Twitter Thread
-                [Content]
+                Output format (JSON):
+                {
+                    "title": "SEO Optimized Title",
+                    "content": "Full markdown content...",
+                    "excerpt": "Short summary...",
+                    "seoTitle": "Title for Google",
+                    "seoDescription": "Meta description...",
+                    "keywords": ["keyword1", "keyword2"]
+                }
                 `
             },
             {
                 role: 'user',
-                content: `Topic: "${topic}"\n\nInclude real examples and a CTA to LuciusAI.`
+                content: `Topic: "${topic}"\n\nInclude real examples and a CTA to LuciusAI. Return ONLY valid JSON.`
             }
         ],
         temperature: 0.7,
-        max_tokens: 4000
+        response_format: { type: "json_object" }
     });
 
-    return completion.choices[0].message.content;
+    return JSON.parse(completion.choices[0].message.content);
 }
 
 /**
@@ -82,26 +80,31 @@ router.post('/generate-blog', async (req, res) => {
 
         console.log(`🤖 Auto-generating blog post: ${topic}`);
 
-        const content = await generateBlogPost(topic);
-
-        // Save to database or file system
-        const fs = require('fs');
-        const path = require('path');
+        const generatedData = await generateBlogPost(topic);
         const slug = topic.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        const filename = `blog-${Date.now()}-${slug}.md`;
 
-        fs.writeFileSync(
-            path.join(__dirname, '../generated-blogs', filename),
-            content
-        );
+        // Save to MongoDB
+        const newPost = new BlogPost({
+            title: generatedData.title,
+            slug: slug + '-' + Date.now(), // Ensure uniqueness
+            content: generatedData.content,
+            excerpt: generatedData.excerpt,
+            seo: {
+                title: generatedData.seoTitle,
+                description: generatedData.seoDescription,
+                keywords: generatedData.keywords
+            },
+            isPublished: true,
+            publishedAt: new Date()
+        });
 
-        console.log(`✅ Blog post generated: ${filename}`);
+        await newPost.save();
+
+        console.log(`✅ Blog post saved to DB: ${newPost.title}`);
 
         res.json({
             success: true,
-            topic,
-            filename,
-            preview: content.substring(0, 500) + '...'
+            post: newPost
         });
     } catch (err) {
         console.error('Blog generation error:', err);
@@ -113,98 +116,76 @@ router.post('/generate-blog', async (req, res) => {
  * Serve auto-generated blogs as public pages
  * Each becomes a unique SEO landing page
  */
-router.get('/blog/:slug', (req, res) => {
-    const fs = require('fs');
-    const path = require('path');
-    const blogsDir = path.join(__dirname, '../generated-blogs');
+router.get('/blog/:slug', async (req, res) => {
+    try {
+        const post = await BlogPost.findOne({ slug: req.params.slug });
 
-    // Find blog file matching slug
-    const files = fs.readdirSync(blogsDir);
-    const matchingFile = files.find(f => f.includes(req.params.slug));
+        if (!post) {
+            return res.status(404).send('Blog not found');
+        }
 
-    if (!matchingFile) {
-        return res.status(404).send('Blog not found');
-    }
+        // Increment views
+        post.views += 1;
+        await post.save();
 
-    const content = fs.readFileSync(path.join(blogsDir, matchingFile), 'utf-8');
-
-    // Convert markdown to HTML (simple version)
-    const html = `
+        // Convert markdown to HTML (simple version)
+        const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${req.params.slug.replace(/-/g, ' ')} | LuciusAI Blog</title>
-  <meta name="description" content="Expert insights on government tender writing from LuciusAI">
+  <title>${post.seo.title || post.title} | LuciusAI Blog</title>
+  <meta name="description" content="${post.seo.description || post.excerpt}">
   <style>
-    body { max-width: 800px; margin: 40px auto; padding: 0 20px; font-family: -apple-system, sans-serif; line-height: 1.6; }
-    h1 { font-size: 2.5rem; margin-bottom: 20px; }
-    h2 { font-size: 1.8rem; margin-top: 40px; }
+    body { max-width: 800px; margin: 40px auto; padding: 0 20px; font-family: -apple-system, sans-serif; line-height: 1.6; color: #333; }
+    h1 { font-size: 2.5rem; margin-bottom: 20px; color: #111; }
+    h2 { font-size: 1.8rem; margin-top: 40px; color: #222; }
     h3 { font-size: 1.4rem; margin-top: 30px; }
-    .cta { background: #4F46E5; color: white; padding: 15px 30px; display: inline-block; border-radius: 8px; text-decoration: none; margin: 40px 0; font-weight: 600; }
+    .meta { color: #666; font-size: 0.9rem; margin-bottom: 30px; }
+    .cta { background: #4F46E5; color: white; padding: 15px 30px; display: inline-block; border-radius: 8px; text-decoration: none; margin: 40px 0; font-weight: 600; text-align: center; }
+    .cta:hover { background: #4338ca; }
+    pre { background: #f4f4f5; padding: 15px; border-radius: 8px; overflow-x: auto; }
+    img { max-width: 100%; border-radius: 8px; }
   </style>
 </head>
 <body>
-  <pre style="white-space: pre-wrap; font-family: Georgia, serif;">${content}</pre>
+  <h1>${post.title}</h1>
+  <div class="meta">Published on ${new Date(post.publishedAt).toLocaleDateString()} • ${post.views} views</div>
   
-  <hr style="margin: 60px 0;">
+  <div style="white-space: pre-wrap;">${post.content}</div>
   
-  <div style="text-align: center;">
-    <h3>Try LuciusAI - AI Tender Writing</h3>
-    <p>Generate professional tender proposals in 5 minutes instead of 20 hours.</p>
-    <a href="https://www.ailucius.com/pricing" class="cta">Start Free Trial →</a>
+  <hr style="margin: 60px 0; border: 0; border-top: 1px solid #eee;">
+  
+  <div style="text-align: center; background: #f9fafb; padding: 40px; border-radius: 12px;">
+    <h3>Win More Tenders with AI</h3>
+    <p>LuciusAI analyzes tenders and writes winning proposals in minutes.</p>
+    <a href="https://www.ailucius.com" class="cta">Start Free Trial →</a>
   </div>
 </body>
 </html>
-  `;
+        `;
 
-    res.send(html);
+        res.send(html);
+    } catch (err) {
+        res.status(500).send('Server error');
+    }
 });
 
 /**
- * List all auto-generated blogs
+ * List all auto-generated blogs (JSON for frontend)
  */
-router.get('/blogs', (req, res) => {
-    const fs = require('fs');
-    const path = require('path');
-    const blogsDir = path.join(__dirname, '../generated-blogs');
+router.get('/blogs', async (req, res) => {
+    try {
+        const blogs = await BlogPost.find({ isPublished: true })
+            .sort({ publishedAt: -1 })
+            .select('title slug excerpt publishedAt views');
 
-    if (!fs.existsSync(blogsDir)) {
-        fs.mkdirSync(blogsDir, { recursive: true });
+        res.json({ blogs, count: blogs.length });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-
-    const files = fs.readdirSync(blogsDir);
-
-    const blogs = files.map(file => {
-        const slug = file.replace('blog-', '').replace('.md', '');
-        return {
-            slug,
-            url: `/auto-content/blog/${slug}`,
-            file
-        };
-    });
-
-    res.json({ blogs, count: blogs.length });
 });
 
 module.exports = router;
 
-/**
- * AUTOMATION SETUP:
- * 
- * 1. Add route to server.js:
- *    app.use('/auto-content', require('./routes/auto-content-api'));
- * 
- * 2. Create cron job (runs weekly):
- *    curl -X POST https://www.ailucius.com/auto-content/generate-blog
- * 
- * 3. Set up on Render.com cron jobs (free tier):
- *    - Schedule: weekly
- *    - Command: curl -X POST $RENDER_EXTERNAL_URL/auto-content/generate-blog
- * 
- * RESULT: New SEO blog post generated every week automatically
- * Each post = new keyword ranking = more organic traffic
- * 
- * Expected: 50+ blog posts per year → 5K-10K visitors/month from blog SEO
- */

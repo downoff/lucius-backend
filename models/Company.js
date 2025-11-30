@@ -43,6 +43,14 @@ const CompanySchema = new mongoose.Schema(
       primary_color: { type: String, default: '#4F46E5' }, // Default Indigo-600
     },
     api_key: { type: String, unique: true, sparse: true }, // For API Access
+
+    // Sales Automation (NEW)
+    sdr_status: {
+      email_sent: { type: Boolean, default: false },
+      sent_at: { type: Date }
+    },
+    industry: { type: String },
+    contact_email: { type: String }, // Primary contact for SDR
   },
   { timestamps: true }
 );

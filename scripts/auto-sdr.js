@@ -1,37 +1,51 @@
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const mongoose = require('mongoose');
 const OpenAI = require('openai');
+const sgMail = require('@sendgrid/mail');
+const Company = require('../models/Company'); // Assuming Company model exists
 
-console.log('🚀 Starting AI SDR Script...');
+console.log('🚀 Starting AI SDR Script (Production Mode)...');
 
-// Check API Key
-if (!process.env.OPENAI_API_KEY) {
-    console.error('❌ FATAL: OPENAI_API_KEY is missing in .env file');
+// Check API Keys
+if (!process.env.OPENAI_API_KEY || !process.env.SENDGRID_API_KEY || !process.env.MONGO_URI) {
+    console.error('❌ FATAL: Missing API keys (OPENAI, SENDGRID, or MONGO_URI)');
     process.exit(1);
 }
 
-// Initialize OpenAI
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize Services
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-// Mock Data Source
-const NEW_LEADS = [
-    { name: "Sarah Jenkins", role: "Procurement Manager", company: "City of Manchester", email: "sarah.j@manchester.gov.uk", tender: "Digital Transformation Framework" },
-    { name: "David Mueller", role: "CTO", company: "TechSolutions GmbH", email: "d.mueller@techsolutions.de", tender: "Cloud Migration Services" },
-    { name: "Jean Dupont", role: "Director", company: "Construct France", email: "j.dupont@construct.fr", tender: "Public Infrastructure Project" }
-];
+// Connect to DB
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('✅ Connected to MongoDB'))
+    .catch(err => {
+        console.error('❌ DB Connection Error:', err);
+        process.exit(1);
+    });
 
 async function runAiSdr() {
     try {
-        console.log('🕵️  AI SDR: Scouting for new leads...');
+        console.log('🕵️  AI SDR: Scouting for leads (Users who signed up but not paid)...');
 
-        // Simulate processing delay
-        await new Promise(r => setTimeout(r, 1000));
-        console.log(`✅ Found ${NEW_LEADS.length} high-value targets matching our ICP.\n`);
+        // Find leads: Companies created > 24h ago, NOT paid, NO email sent yet
+        const leads = await Company.find({
+            is_paid: false,
+            createdAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Older than 24h
+            'sdr_status.email_sent': { $ne: true }
+        }).limit(5); // Process 5 at a time to be safe
 
-        for (const lead of NEW_LEADS) {
-            console.log(`🤖 Analyzing lead: ${lead.name} (${lead.company})...`);
+        console.log(`✅ Found ${leads.length} leads to contact.\n`);
+
+        for (const lead of leads) {
+            const email = lead.contact_email || (lead.contact_emails && lead.contact_emails[0]);
+            console.log(`🤖 Analyzing lead: ${lead.company_name} (${email})...`);
+
+            if (!email) {
+                console.log('   ⚠️ No email, skipping.');
+                continue;
+            }
 
             // Generate Personalized Email
             const completion = await openai.chat.completions.create({
@@ -39,17 +53,18 @@ async function runAiSdr() {
                 messages: [
                     {
                         role: 'system',
-                        content: `You are an expert B2G sales representative. Write a cold email to a potential client.
-                        Goal: Get them to try LuciusAI for their upcoming tender.
-                        Tone: Professional, concise, helpful. No fluff.
-                        Value Prop: "We can automate 80% of your proposal for [Tender Name] and increase win probability."
+                        content: `You are an expert B2G sales representative for LuciusAI.
+                        Goal: Persuade a user who signed up but hasn't subscribed to start a free trial or upgrade.
+                        Tone: Helpful, not pushy. Focus on value.
+                        Context: They signed up but haven't paid.
+                        Value Prop: "LuciusAI can write your next proposal in minutes. Don't let your account sit idle."
                         `
                     },
                     {
                         role: 'user',
-                        content: `Lead: ${lead.name}, ${lead.role} at ${lead.company}.
-                        Context: They are bidding on "${lead.tender}".
-                        Write the email.`
+                        content: `Lead Company: ${lead.company_name}.
+                        Industry: ${lead.industry || 'Government Contracting'}.
+                        Write a short, personal cold email.`
                     }
                 ],
                 temperature: 0.7,
@@ -57,27 +72,39 @@ async function runAiSdr() {
 
             const emailBody = completion.choices[0].message.content;
 
-            // "Send" Email
-            console.log('---------------------------------------------------');
-            console.log(`📧 SENDING TO: ${lead.email}`);
-            console.log(`Subject: Question about ${lead.tender}`);
-            console.log(emailBody);
-            console.log('---------------------------------------------------');
+            // Send Email via SendGrid
+            const msg = {
+                to: email,
+                from: process.env.PUBLIC_FROM_EMAIL || 'noreply@ailucius.com', // Verified sender
+                subject: `Quick question about ${lead.company_name}'s tenders`,
+                text: emailBody,
+                html: emailBody.replace(/\n/g, '<br>')
+            };
 
-            // Simulate sending delay
-            await new Promise(r => setTimeout(r, 1500));
+            try {
+                await sgMail.send(msg);
+                console.log(`   ✅ Email sent to ${email}`);
+
+                // Update DB
+                lead.sdr_status = { email_sent: true, sent_at: new Date() };
+                await lead.save();
+
+            } catch (emailError) {
+                console.error(`   ❌ Failed to send email to ${email}:`, emailError.message);
+            }
+
+            // Rate limit safety
+            await new Promise(r => setTimeout(r, 2000));
         }
 
-        console.log('\n✅ AI SDR Run Complete. 3 Emails Sent.');
+        console.log('\n✅ AI SDR Run Complete.');
+        process.exit(0);
+
     } catch (error) {
         console.error('❌ AI SDR Failed:', error);
-        if (error.response) {
-            console.error('OpenAI Error Data:', error.response.data);
-        }
+        process.exit(1);
     }
 }
 
 // Run
-runAiSdr().catch(err => {
-    console.error('❌ Unhandled Promise Rejection:', err);
-});
+runAiSdr();
