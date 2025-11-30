@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>https://luciusai.com/sitemap-uk.xml</loc>
+    <lastmod>2025-11-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://luciusai.com/sitemap-eu.xml</loc>
+    <lastmod>2025-11-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://luciusai.com/sitemap-cities.xml</loc>
+    <lastmod>2025-11-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://luciusai.com/sitemap-blog.xml</loc>
+    <lastmod>2025-11-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://luciusai.com/sitemap-tools.xml</loc>
+    <lastmod>2025-11-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://luciusai.com/sitemap-core.xml</loc>
+    <lastmod>2025-11-30</lastmod>
+  </sitemap>
+</sitemapindex>

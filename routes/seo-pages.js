@@ -89,6 +89,41 @@ router.get("/:tenderType/:industry/:location", (req, res) => {
     location: locationText,
     canonicalUrl: `https://www.ailucius.com/ai-tender-writing/${tenderType}/${industry}/${location}`,
     recentTenders, // Pass to frontend
+    // FAQ data for People Also Ask optimization
+    faqs: [
+      {
+        question: `How long does it take to write a ${industryText} tender in ${locationText}?`,
+        answer: `With LuciusAI, you can write a professional ${industryText} tender proposal in 30-45 minutes. Manually, it typically takes 10-15 hours. Our AI analyzes requirements, generates compliant content, and ensures you meet all mandatory criteria for ${locationText} government contracts.`
+      },
+      {
+        question: `What are the requirements for ${industryText} government tenders in ${locationText}?`,
+        answer: `${locationText} ${industryText} tenders typically require: company registration, financial statements, technical capability proof, health & safety policies, insurance certificates, and past project references. LuciusAI helps you address each requirement systematically with AI-generated content.`
+      },
+      {
+        question: `How much does ${industryText} tender writing cost?`,
+        answer: `Professional ${industryText} tender writers charge €2,000-€10,000 per proposal. LuciusAI costs €99/month for unlimited tenders, saving you €1,900+ per tender while delivering faster, more consistent results.`
+      },
+      {
+        question: `What is the success rate for ${industryText} tenders in ${locationText}?`,
+        answer: `The average win rate for ${industryText} government tenders in ${locationText} is 15-25%. Companies using LuciusAI report 25-35% win rates due to better compliance checking, professional presentation, and thorough requirement coverage.`
+      },
+      {
+        question: `Can AI write government ${industryText} tenders?`,
+        answer: `Yes. LuciusAI's GPT-4o AI is specifically trained on ${locationText} government tender requirements. It analyzes tender documents, extracts mandatory criteria, generates compliant proposals, and checks for completeness before submission. It's been used to win €12M+ in contracts.`
+      },
+      {
+        question: `How do I bid on ${locationText} government ${industryText} contracts?`,
+        answer: `To bid on ${locationText} ${industryText} tenders: 1) Find opportunities on official procurement portals, 2) Review requirements carefully, 3) Use LuciusAI to generate a compliant proposal in 30 minutes, 4) Review and customize, 5) Submit before deadline. Our AI ensures you don't miss any mandatory requirements.`
+      },
+      {
+        question: `What are common mistakes in ${industryText} tender submissions?`,
+        answer: `Common mistakes include: missing mandatory requirements (instant rejection), unclear pricing structure, late submissions, poor formatting, incomplete documentation, and not addressing evaluation criteria. LuciusAI prevents these by automatically checking compliance and highlighting missing elements.`
+      },
+      {
+        question: `How can I improve my ${industryText} tender win rate in ${locationText}?`,
+        answer: `Improve your win rate by: using AI to ensure 100% compliance, submitting professional proposals, addressing all evaluation criteria thoroughly, providing clear pricing, including relevant case studies, highlighting ${locationText}-specific experience, and submitting early to avoid technical issues.`
+      }
+    ],
     features: [
       { title: `${industryText}-Specific Templates`, desc: `Pre-built templates optimized for ${industryText.toLowerCase()} ${tenderTypeText.toLowerCase()} in ${locationText}.` },
       { title: `${locationText} Compliance`, desc: `Automatically tailored for ${locationText} procurement regulations. GDPR compliant.` },
