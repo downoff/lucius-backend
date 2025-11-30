@@ -87,7 +87,7 @@ ${tenderText}
  */
 router.post("/proposal", async (req, res) => {
   try {
-    const { analysis, companyProfile, template = "standard" } = req.body || {};
+    const { analysis, companyProfile, template = "standard", language = "English" } = req.body || {};
 
     if (!analysis || !analysis.trim()) {
       return res.status(400).json({ error: "analysis is required." });
@@ -116,6 +116,7 @@ You are Lucius Tender Copilot, a senior proposal writer.
 Use the tender analysis and company profile below to draft a structured proposal suitable for a public tender response.
 
 TEMPLATE STYLE: ${template.toUpperCase()}
+LANGUAGE: Write the entire proposal in ${language.toUpperCase()}.
 ${toneInstruction}
 
 TENDER ANALYSIS:
@@ -158,4 +159,79 @@ Keep it 1,000–1,800 words.
   }
 });
 
+/**
+ * POST /api/tender/check-compliance
+ * body: { proposal: string, requirements: string }
+ * returns: { compliant: boolean, issues: array, score: number }
+ */
+router.post("/check-compliance", async (req, res) => {
+  try {
+    const { proposal, requirements } = req.body || {};
+
+    if (!proposal || !proposal.trim()) {
+      return res.status(400).json({ error: "proposal is required." });
+    }
+    if (!requirements || !requirements.trim()) {
+      return res.status(400).json({ error: "requirements is required." });
+    }
+
+    const prompt = `
+You are a compliance checker for government tenders. Review the proposal against the mandatory requirements.
+
+MANDATORY REQUIREMENTS:
+"""
+${requirements}
+"""
+
+PROPOSAL:
+"""
+${proposal}
+"""
+
+Analyze the proposal and respond in this format:
+
+COMPLIANCE SCORE: [0-100]
+OVERALL STATUS: [COMPLIANT / PARTIAL / NON-COMPLIANT]
+
+MISSING REQUIREMENTS:
+- [List any missing mandatory requirements]
+
+WEAK SECTIONS:
+- [List sections that need improvement]
+
+RECOMMENDATIONS:
+- [Specific suggestions to improve compliance]
+`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0.1,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const analysis = completion.choices?.[0]?.message?.content || "";
+
+    // Parse the score (simple regex)
+    const scoreMatch = analysis.match(/COMPLIANCE SCORE:\s*(\d+)/i);
+    const score = scoreMatch ? parseInt(scoreMatch[1]) : 0;
+
+    const compliant = score >= 90;
+
+    res.json({
+      compliant,
+      score,
+      analysis,
+      summary: compliant
+        ? "✅ Proposal meets all mandatory requirements"
+        : score >= 70
+          ? "⚠️ Proposal partially compliant - review recommendations"
+          : "❌ Proposal has major compliance issues"
+    });
+  } catch (err) {
+    console.error("Compliance check error:", err);
+    res.status(500).json({ error: "Compliance check failed." });
+  }
+});
+
 module.exports = router;
+

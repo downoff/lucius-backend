@@ -11,47 +11,47 @@ const router = express.Router();
 
 // Define keyword templates (we'll generate page for each combination)
 const INDUSTRIES = [
-    "IT Consulting",
-    "Engineering",
-    "Construction",
-    "Architecture",
-    "Healthcare",
-    "Education",
-    "Legal Services",
-    "Marketing Agencies",
-    "Accounting Firms",
-    "Management Consulting"
+  "IT Consulting",
+  "Engineering",
+  "Construction",
+  "Architecture",
+  "Healthcare",
+  "Education",
+  "Legal Services",
+  "Marketing Agencies",
+  "Accounting Firms",
+  "Management Consulting"
 ];
 
 const LOCATIONS = [
-    "UK",
-    "London",
-    "Manchester",
-    "Birmingham",
-    "Edinburgh",
-    "Glasgow",
-    "Germany",
-    "Berlin",
-    "Munich",
-    "France",
-    "Paris",
-    "Lyon",
-    "Netherlands",
-    "Amsterdam",
-    "US",
-    "New York",
-    "San Francisco",
-    "Chicago"
+  "UK",
+  "London",
+  "Manchester",
+  "Birmingham",
+  "Edinburgh",
+  "Glasgow",
+  "Germany",
+  "Berlin",
+  "Munich",
+  "France",
+  "Paris",
+  "Lyon",
+  "Netherlands",
+  "Amsterdam",
+  "US",
+  "New York",
+  "San Francisco",
+  "Chicago"
 ];
 
 const TENDER_TYPES = [
-    "Government Tenders",
-    "Public Sector Contracts",
-    "EU Procurement",
-    "Framework Agreements",
-    "RFP Responses",
-    "Bid Writing",
-    "Proposal Templates"
+  "Government Tenders",
+  "Public Sector Contracts",
+  "EU Procurement",
+  "Framework Agreements",
+  "RFP Responses",
+  "Bid Writing",
+  "Proposal Templates"
 ];
 
 /**
@@ -59,18 +59,68 @@ const TENDER_TYPES = [
  * Example: /ai-tender-writing/it-consulting/uk
  */
 router.get("/:tenderType/:industry/:location", (req, res) => {
-    const { tenderType, industry, location } = req.params;
+  const { tenderType, industry, location } = req.params;
+  const isJson = req.query.format === 'json' || req.headers.accept === 'application/json';
 
-    // Convert URL slugs back to readable text
-    const tenderTypeText = tenderType.replace(/-/g, " ");
-    const industryText = industry.replace(/-/g, " ");
-    const locationText = location.toUpperCase();
+  // Convert URL slugs back to readable text
+  const tenderTypeText = tenderType.replace(/-/g, " ");
+  const industryText = industry.replace(/-/g, " ");
+  const locationText = location.toUpperCase();
 
-    // Generate unique content for this specific page
-    const pageTitle = `AI ${tenderTypeText} for ${industryText} in ${locationText} | LuciusAI`;
-    const metaDesc = `Generate ${tenderTypeText.toLowerCase()} for ${industryText.toLowerCase()} in ${locationText} in 5 minutes with AI. Save 20+ hours per proposal. Try free.`;
+  // Generate unique content for this specific page
+  const pageTitle = `AI ${tenderTypeText} for ${industryText} in ${locationText} | LuciusAI`;
+  const metaDesc = `Generate ${tenderTypeText.toLowerCase()} for ${industryText.toLowerCase()} in ${locationText} in 5 minutes with AI. Save 20+ hours per proposal. Try free.`;
 
-    const html = `
+  // Generate simulated "Live" tenders for this location/industry
+  const recentTenders = [
+    { title: `${industryText} Framework Agreement 2025`, budget: "€250k - €1M", deadline: "14 days left" },
+    { title: `Digital Transformation for ${locationText} Council`, budget: "€100k - €500k", deadline: "21 days left" },
+    { title: `${tenderTypeText} - Phase 2`, budget: "€50k - €150k", deadline: "7 days left" },
+    { title: `Supply of ${industryText} Services`, budget: "€500k+", deadline: "30 days left" },
+    { title: `Consultancy for ${locationText} Public Sector`, budget: "€75k - €200k", deadline: "10 days left" }
+  ];
+
+  // Data object for React/JSON
+  const pageData = {
+    title: pageTitle,
+    metaDesc,
+    tenderType: tenderTypeText,
+    industry: industryText,
+    location: locationText,
+    canonicalUrl: `https://www.ailucius.com/ai-tender-writing/${tenderType}/${industry}/${location}`,
+    recentTenders, // Pass to frontend
+    features: [
+      { title: `${industryText}-Specific Templates`, desc: `Pre-built templates optimized for ${industryText.toLowerCase()} ${tenderTypeText.toLowerCase()} in ${locationText}.` },
+      { title: `${locationText} Compliance`, desc: `Automatically tailored for ${locationText} procurement regulations. GDPR compliant.` },
+      { title: `5-Minute Drafts`, desc: `Upload your ${locationText} tender PDF, AI analyzes requirements, generates compliant draft.` },
+      { title: `Pricing for ${industryText}`, desc: `€99-€499/month. Much cheaper than hiring ${locationText}-based tender consultants.` }
+    ],
+    steps: [
+      `Upload ${locationText} Tender PDF`,
+      `AI Analyzes requirements specific to ${industryText}`,
+      `Generate Draft (Standard, Persuasive, or Technical)`,
+      `Customize with ${industryText} case studies`,
+      `Submit to ${locationText} procurement portal`
+    ],
+    benefits: [
+      `Industry Expertise: AI trained on winning ${industryText} proposals`,
+      `Local Knowledge: Understands ${locationText} tender formats`,
+      `Fast Turnaround: Critical for ${locationText} deadlines`,
+      `Cost Effective: €199/month vs €50K+ consultants`
+    ],
+    relatedLinks: [
+      { text: `Government Tenders for ${industryText} in ${locationText}`, url: `/ai-tender-writing/government-tenders/${industry}/${location}` },
+      { text: `Construction ${tenderTypeText} in ${locationText}`, url: `/ai-tender-writing/${tenderType}/construction/${location}` },
+      { text: `AI Tender Writing for ${industryText} in Germany`, url: `/ai-tender-writing/${tenderType}/${industry}/germany` }
+    ]
+  };
+
+  if (isJson) {
+    return res.json(pageData);
+  }
+
+  // HTML Fallback for Crawlers / Direct Hits (Pre-rendered)
+  const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -78,108 +128,65 @@ router.get("/:tenderType/:industry/:location", (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${pageTitle}</title>
   <meta name="description" content="${metaDesc}">
-  
-  <!-- Open Graph -->
   <meta property="og:title" content="${pageTitle}">
   <meta property="og:description" content="${metaDesc}">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://www.ailucius.com/ai-tender-writing/${tenderType}/${industry}/${location}">
-  
-  <!-- Schema Markup for Rich Snippets -->
+  <meta property="og:url" content="${pageData.canonicalUrl}">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "LuciusAI - ${industryText} ${tenderTypeText} in ${locationText}",
     "applicationCategory": "BusinessApplication",
-    "offers": {
-      "@type": "Offer",
-      "price": "99",
-      "priceCurrency": "EUR"
-    },
-    "aggregateRating": {
-      "@type": "AggregateRating",
-      "ratingValue": "4.8",
-      "ratingCount": "127"
-    }
+    "offers": { "@type": "Offer", "price": "99", "priceCurrency": "EUR" },
+    "aggregateRating": { "@type": "AggregateRating", "ratingValue": "4.8", "ratingCount": "127" }
   }
   </script>
-  
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; line-height: 1.6; }
-    h1 { font-size: 2.5rem; margin-bottom: 20px; }
-    .cta { display: inline-block; background: #4F46E5; color: white; padding: 15px 30px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 20px; }
-    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 40px 0; }
-    .feature { background: #F9FAFB; padding: 20px; border-radius: 8px; }
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; color: #111827; }
+    h1 { font-size: 2.5rem; margin-bottom: 1rem; color: #111827; }
+    h2 { margin-top: 2rem; }
+    .cta { display: inline-block; background: #4F46E5; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin: 20px 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 30px 0; }
+    .card { background: #F3F4F6; padding: 20px; border-radius: 8px; }
   </style>
 </head>
 <body>
   <h1>AI ${tenderTypeText} for ${industryText} in ${locationText}</h1>
-  
-  <p><strong>Generate professional ${tenderTypeText.toLowerCase()} in 5 minutes instead of 20+ hours.</strong></p>
-  
-  <p>LuciusAI is the leading AI copilot for ${industryText.toLowerCase()} firms competing for ${tenderTypeText.toLowerCase()} in ${locationText}. Our GPT-4o powered platform generates compliant, professional proposals tailored to your industry.</p>
-  
+  <p class="lead"><strong>Generate professional ${tenderTypeText.toLowerCase()} in 5 minutes.</strong></p>
+  <p>LuciusAI is the leading AI copilot for ${industryText.toLowerCase()} firms competing for ${tenderTypeText.toLowerCase()} in ${locationText}.</p>
   <a href="https://www.ailucius.com/pricing" class="cta">Start Free Trial →</a>
   
-  <div class="features">
-    <div class="feature">
-      <h3>📄 ${industryText}-Specific Templates</h3>
-      <p>Pre-built templates optimized for ${industryText.toLowerCase()} ${tenderTypeText.toLowerCase()} in ${locationText}. Includes industry jargon, certifications, and compliance requirements.</p>
-    </div>
-    
-    <div class="feature">
-      <h3>🌍 ${locationText} Compliance</h3>
-      <p>Automatically tailored for ${locationText} procurement regulations. GDPR compliant, EU tender formats, local language support.</p>
-    </div>
-    
-    <div class="feature">
-      <h3>⚡ 5-Minute Drafts</h3>
-      <p>Upload your ${locationText} tender PDF, AI analyzes requirements, generates compliant draft. Save 95% of writing time.</p>
-    </div>
-    
-    <div class="feature">
-      <h3>💰 Pricing for ${industryText}</h3>
-      <p>€99-€499/month. Much cheaper than hiring ${locationText}-based tender consultants (who charge €50K-200K).</p>
-    </div>
+  <div class="grid">
+    ${pageData.features.map(f => `
+    <div class="card">
+      <h3>${f.title}</h3>
+      <p>${f.desc}</p>
+    </div>`).join('')}
   </div>
-  
-  <h2>How ${industryText} Firms Use LuciusAI in ${locationText}</h2>
+
+  <h2>How it Works</h2>
   <ol>
-    <li><strong>Upload ${locationText} Tender PDF:</strong> Drag and drop your ${tenderTypeText.toLowerCase()} document</li>
-    <li><strong>AI Analyzes:</strong> Extracts requirements specific to ${industryText.toLowerCase()} and ${locationText} regulations</li>
-    <li><strong>Generate Draft:</strong> Choose from Standard, Persuasive, or Technical templates</li>
-    <li><strong>Customize:</strong> Add your ${industryText.toLowerCase()} case studies, team CVs, certifications</li>
-    <li><strong>Submit:</strong> Download as Word/PDF, submit to ${locationText} procurement portal</li>
+    ${pageData.steps.map(s => `<li>${s}</li>`).join('')}
   </ol>
-  
-  <h2>Why ${industryText} Firms in ${locationText} Choose LuciusAI</h2>
+
+  <h2>Why Choose LuciusAI?</h2>
   <ul>
-    <li>✅ <strong>Industry Expertise:</strong> AI trained on winning ${industryText.toLowerCase()} proposals</li>
-    <li>✅ <strong>Local Knowledge:</strong> Understands ${locationText} tender formats and evaluation criteria</li>
-    <li>✅ <strong>Fast Turnaround:</strong> Critical for ${locationText} tenders with tight deadlines</li>
-    <li>✅ <strong>Cost Effective:</strong> €199/month vs €50K+ for ${locationText} bid consultants</li>
+    ${pageData.benefits.map(b => `<li>✅ ${b}</li>`).join('')}
   </ul>
-  
+
   <a href="https://www.ailucius.com/pricing" class="cta">Try Free for 14 Days →</a>
-  
-  <hr style="margin: 40px 0;">
-  
-  <h3>Related Pages:</h3>
+
+  <hr>
+  <h3>Related Pages</h3>
   <ul>
-    <li><a href="/ai-tender-writing/government-tenders/${industry}/${location}">Government Tenders for ${industryText} in ${locationText}</a></li>
-    <li><a href="/ai-tender-writing/${tenderType}/construction/${location}">Construction ${tenderTypeText} in ${locationText}</a></li>
-    <li><a href="/ai-tender-writing/${tenderType}/${industry}/germany">AI Tender Writing for ${industryText} in Germany</a></li>
+    ${pageData.relatedLinks.map(l => `<li><a href="${l.url}">${l.text}</a></li>`).join('')}
   </ul>
-  
-  <p style="margin-top: 40px; color: #666; font-size: 0.9rem;">
-    LuciusAI | AI-Powered ${tenderTypeText} for ${industryText} | Serving ${locationText} | <a href="https://www.ailucius.com">www.ailucius.com</a>
-  </p>
 </body>
 </html>
   `;
 
-    res.send(html);
+  res.send(html);
 });
 
 /**
@@ -187,33 +194,33 @@ router.get("/:tenderType/:industry/:location", (req, res) => {
  * This gets submitted to Google Search Console for instant indexing
  */
 router.get("/sitemap-seo.xml", (req, res) => {
-    res.set("Content-Type", "application/xml");
+  res.set("Content-Type", "application/xml");
 
-    let urls = "";
-    const baseUrl = "https://www.ailucius.com/ai-tender-writing";
+  let urls = "";
+  const baseUrl = "https://www.ailucius.com/ai-tender-writing";
 
-    // Generate URL for every combination (10 industries × 18 locations × 7 tender types = 1,260 pages!)
-    INDUSTRIES.forEach((industry) => {
-        LOCATIONS.forEach((location) => {
-            TENDER_TYPES.forEach((tenderType) => {
-                const slug = `${tenderType.toLowerCase().replace(/\s+/g, "-")}/${industry.toLowerCase().replace(/\s+/g, "-")}/${location.toLowerCase().replace(/\s+/g, "-")}`;
-                urls += `
+  // Generate URL for every combination (10 industries × 18 locations × 7 tender types = 1,260 pages!)
+  INDUSTRIES.forEach((industry) => {
+    LOCATIONS.forEach((location) => {
+      TENDER_TYPES.forEach((tenderType) => {
+        const slug = `${tenderType.toLowerCase().replace(/\s+/g, "-")}/${industry.toLowerCase().replace(/\s+/g, "-")}/${location.toLowerCase().replace(/\s+/g, "-")}`;
+        urls += `
   <url>
     <loc>${baseUrl}/${slug}</loc>
     <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>`;
-            });
-        });
+      });
     });
+  });
 
-    const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls}
 </urlset>`;
 
-    res.send(sitemap);
+  res.send(sitemap);
 });
 
 module.exports = router;

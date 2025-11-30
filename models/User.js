@@ -24,15 +24,20 @@ const userSchema = new mongoose.Schema({
     emailVerificationToken: String,
     emailVerified: { type: Boolean, default: false },
     niche: { type: String, default: 'General' }, // <-- The new field
-    
+
     // Viral Referral Engine
     referralCode: { type: String, unique: true, default: () => nanoid(8) },
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
+    // Team Collaboration (NEW)
+    company_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', default: null },
+    role: { type: String, enum: ['owner', 'admin', 'member', 'viewer'], default: 'owner' },
+    invited_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+
 }, { timestamps: true });
 
 // Password hashing middleware
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', async function (next) {
     if (this.isModified('password') && this.password) {
         const salt = await bcrypt.genSalt(10);
         this.password = await bcrypt.hash(this.password, salt);

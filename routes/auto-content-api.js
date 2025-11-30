@@ -39,15 +39,33 @@ async function generateBlogPost(topic) {
         messages: [
             {
                 role: 'system',
-                content: `You are an expert tender writing consultant with 15 years of experience. Write a comprehensive, SEO-optimized blog post that provides genuine value. Include real examples, statistics, and actionable advice. Write in a professional but approachable tone. Target length: 1500-2000 words.`
+                content: `You are an expert tender writing consultant and social media strategist.
+                
+                Task 1: Write a comprehensive, SEO-optimized blog post (1500 words).
+                Task 2: Write a LinkedIn post (professional, value-driven) promoting the blog.
+                Task 3: Write a Twitter thread (5 tweets, punchy) promoting the blog.
+                
+                Output format:
+                [BLOG CONTENT MARKDOWN]
+                
+                ---
+                
+                ## 📱 Social Media Assets
+                
+                ### LinkedIn Post
+                [Content]
+                
+                ### Twitter Thread
+                [Content]
+                `
             },
             {
                 role: 'user',
-                content: `Write a complete blog post on: "${topic}"\n\nInclude:\n1. Engaging introduction with hook\n2. 5-7 main sections with subheadings\n3. Real examples and case studies\n4. Actionable takeaways\n5. CTA to try LuciusAI at the end\n\nFormat as Markdown with proper headings.`
+                content: `Topic: "${topic}"\n\nInclude real examples and a CTA to LuciusAI.`
             }
         ],
         temperature: 0.7,
-        max_tokens: 3000
+        max_tokens: 4000
     });
 
     return completion.choices[0].message.content;
