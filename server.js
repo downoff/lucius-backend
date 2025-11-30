@@ -188,6 +188,7 @@ app.use("/api/analytics", require("./routes/analytics"));
 app.use("/api/success", require("./routes/success-metrics"));
 app.use("/api/templates", require("./routes/templates"));
 app.use("/api/automation", require("./routes/automation-triggers"));
+app.use("/api/growth", require("./routes/viral-growth"));
 
 // Programmatic SEO routes
 app.use("/ai-tender-writing", require("./routes/seo-pages"));
