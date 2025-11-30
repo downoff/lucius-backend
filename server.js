@@ -187,6 +187,7 @@ app.use("/api/lead-magnet", require("./routes/auto-lead-magnet"));
 app.use("/api/analytics", require("./routes/analytics"));
 app.use("/api/success", require("./routes/success-metrics"));
 app.use("/api/templates", require("./routes/templates"));
+app.use("/api/automation", require("./routes/automation-triggers"));
 
 // Programmatic SEO routes
 app.use("/ai-tender-writing", require("./routes/seo-pages"));
