@@ -10,7 +10,17 @@ const DEMO_COMPANY = {
     description: "A leading IT consultancy specializing in digital transformation, cloud infrastructure, and custom software development for the public sector."
 };
 
-// ... (rest of imports)
+const Parser = require("rss-parser");
+const parser = new Parser();
+const DEMO_RSS_URL = "https://www.contractsfinder.service.gov.uk/Search/RSS.xml";
+const cachedTenders = {};
+const lastFetch = {};
+const CACHE_TTL = 3600000;
+
+
+// ===== SUPPORTED REGIONS =====
+const SupportedRegions = ["UK", "DACH", "FR", "EU-East", "US", "Middle-East"];
+
 
 // ===== UK REAL TENDER DATA =====
 async function fetchRealTenders() {
