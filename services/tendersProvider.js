@@ -143,23 +143,30 @@ function generateStubTenders(region, count = 5) {
         const randomCountry = data.countries[Math.floor(Math.random() * data.countries.length)];
         const budget = `${data.budgetCurrency}${(Math.floor(Math.random() * 500) + 50)}k`;
 
+        const descriptions = [
+            `The contracting authority requires a ${randomTitle} solution to modernize existing workflows. The scope includes requirement gathering, system architecture design, implementation, and ongoing maintenance for a period of 24 months.`,
+            `Proposals are invited for the provision of ${randomTitle}. Key deliverables include a fully functional web-based platform, user training, and migration of legacy data (approx. 5TB).`,
+            `We are seeking a qualified partner for ${randomTitle}. The successful bidder must demonstrate experience with similar public sector projects and compliance with GDPR/local data regulations.`,
+            `This framework agreement covers ${randomTitle} across multiple departments. The focus is on scalability, security, and interoperability with existing Azure/AWS infrastructure.`
+        ];
+        const randomDescription = descriptions[Math.floor(Math.random() * descriptions.length)];
+
         // Simulate AI score for stubs (weighted towards high for demo)
         const isHighFit = Math.random() > 0.3;
         const score = isHighFit ? Math.floor(Math.random() * 15) + 85 : Math.floor(Math.random() * 30) + 50;
 
         tenders.push({
-            _id: `stub-${region}-${Date.now()}-${i}`,
+            id: `stub-${region}-${i}-${Date.now()}`,
             title: randomTitle,
-            short_description: "This is a high-value opportunity matching your company profile. Click to view full details and AI analysis.",
-            description_raw: "Full tender description would appear here...",
-            country: randomCountry,
+            description: randomDescription,
             region: region,
-            deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
-            budget: budget,
-            match_score: score,
-            rationale: isHighFit ? "Strong match with core capabilities in digital transformation." : "Partial match - requires partner for infrastructure components.",
-            source_url: "#",
-            is_real: false
+            country: randomCountry,
+            publicationDate: new Date().toISOString(),
+            deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * (Math.floor(Math.random() * 30) + 14)).toISOString(), // 14-44 days from now
+            url: "#",
+            source: "Official Gazette",
+            matchScore: score, // Pre-calculated mock score
+            budget: budget
         });
     }
 
