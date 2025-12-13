@@ -132,6 +132,14 @@ router.get("/matching", async (req, res) => {
       }
     }
 
+    // ULTIMATE FALLBACK: Use mock data if nothing else works
+    if (regionalTenders.length === 0 && dbTenders.length === 0) {
+      const { getMockTenders } = require("../services/mockTenderData");
+      const mockData = getMockTenders();
+      console.log(`[Tenders] Using ${mockData.length} mock tenders as fallback`);
+      return res.json({ tenders: mockData, region, source: "mock" });
+    }
+
     // 4. Combine
     const combined = [...regionalTenders, ...dbTenders];
 
