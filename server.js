@@ -55,9 +55,22 @@ console.log("[CORS allowlist]", ALLOWLIST);
 app.use(
   cors({
     origin: (origin, cb) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return cb(null, true);
-      const ok = ALLOWLIST.includes(origin);
-      return cb(ok ? null : new Error(`Not allowed by CORS: ${origin}`), ok);
+
+      // Dynamic check for allowed domains
+      const isAllowed =
+        ALLOWLIST.includes(origin) ||
+        /^https:\/\/([\w-]+\.)?ailucius\.com$/.test(origin) ||
+        /^https:\/\/([\w-]+\.)?onrender\.com$/.test(origin) ||
+        /^http:\/\/localhost:\d+$/.test(origin);
+
+      if (isAllowed) {
+        return cb(null, true);
+      } else {
+        console.warn(`[CORS] Blocked request from origin: ${origin}`);
+        return cb(new Error(`Not allowed by CORS: ${origin}`), false);
+      }
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
