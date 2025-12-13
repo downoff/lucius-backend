@@ -167,192 +167,32 @@ async function addToCache(tender) {
 
   let currentCache = [];
   try {
-    if (fs.existsSync(TENDERS_FILE)) {
-      currentCache = JSON.parse(fs.readFileSync(TENDERS_FILE, "utf-8"));
-    }
-  } catch (e) { }
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-  // Dedup
-  const exists = currentCache.find(t => t.title === tender.title || t.url === tender.url);
-  if (!exists) {
-    currentCache.unshift(tender);
-    // Keep file size manageable
-    if (currentCache.length > 200) currentCache = currentCache.slice(0, 200);
-    fs.writeFileSync(TENDERS_FILE, JSON.stringify(currentCache, null, 2));
-
-    // Update memory cache immediately
-    global.latestTendersCache = currentCache;
-  }
-}
-
-async function fetchAndProcessFeed(url, sourceLabel, stats) {
-  // Legacy/broken RSS function - kept for reference or future fix
-}
-
-async function processSingleItem(item, sourceLabel, stats) {
-  // Legacy item processor
-}
-
-module.exports = { ingestFromTED };
-
-async function fetchAndProcessFeed(url, sourceLabel, stats) {
-  if (!url) {
-    console.warn(`⚠️ [Ingest] Skipping empty URL for ${sourceLabel}`);
-    return;
-  }
-
-  console.log(`\n📡 [${sourceLabel}] Fetching feed: ${url}`);
-
-  try {
-    const feed = await parser.parseURL(url);
-    console.log(`   Items found: ${feed.items?.length || 0}`);
-
-    if (!feed.items || feed.items.length === 0) {
-      console.warn(`   ⚠️ Feed was empty or parsed incorrectly.`);
-      return;
-    }
-
-    // Process items
-    // Limit to 50 per feed to avoid blasting quotas/time
-    const items = feed.items.slice(0, 50);
-
-    for (const item of items) {
-      stats.processed++;
-      try {
-        await processSingleItem(item, sourceLabel, stats);
-      } catch (itemErr) {
-        console.error(`   ❌ Error item "${item.title?.substring(0, 30)}...":`, itemErr.message);
-        stats.errors++;
+    let currentCache = [];
+    try {
+      if (fs.existsSync(TENDERS_FILE)) {
+        currentCache = JSON.parse(fs.readFileSync(TENDERS_FILE, "utf-8"));
       }
+    } catch (e) { }
+
+    // Dedup by URL or title
+    const exists = currentCache.find(t => t.url === tender.url || (t.title === tender.title && t.authority === tender.authority));
+    if (!exists) {
+      // Add new at top
+      currentCache.unshift(tender);
+      // Keep file size manageable (200 max)
+      if (currentCache.length > 200) currentCache = currentCache.slice(0, 200);
+      fs.writeFileSync(TENDERS_FILE, JSON.stringify(currentCache, null, 2));
+
+      // Update memory cache immediately
+      global.latestTendersCache = currentCache;
     }
-
-  } catch (err) {
-    stats.errors++;
-    console.error(`❌ [${sourceLabel}] Fetch Failed!`);
-    console.error(`   Status/Code: ${err.code || 'Unknown'}`);
-    console.error(`   Message: ${err.message}`);
-    // If response provided by parser
-    if (err.response) {
-      console.error(`   Response Preview: ${JSON.stringify(err.response).substring(0, 200)}`);
-    }
-  }
-}
-
-async function processSingleItem(item, sourceLabel, stats) {
-  // 1. Normalization
-  const title = (item.title || "Untitled Tender").trim();
-  const rawDesc = item.contentSnippet || item.content || item.summary || "";
-  const link = item.link || item.guid || "";
-  const pubDate = item.pubDate ? new Date(item.pubDate) : new Date();
-
-  // Deduplication Key: URL is usually best. 
-  // If no URL, use guid.
-  const uniqueKey = link || item.guid;
-
-  if (!uniqueKey) {
-    throw new Error("No link or guid found for item");
   }
 
-  // Extract budget heuristic
-  let budget = null;
-  const budgetMatch = rawDesc.match(/[€£$]\s?[\d,]+(\.\d{2})?/);
-  if (budgetMatch) budget = budgetMatch[0];
+// Stub out legacy functions so we don't crash if called
+async function fetchAndProcessFeed(url, sourceLabel, stats) { }
+  async function processSingleItem(item, sourceLabel, stats) { }
 
-  // Country Heuristic (Expanded)
-  if (sourceLabel.includes("UK") || title.includes("United Kingdom") || rawDesc.includes("United Kingdom") || title.includes("London")) country = "UK";
-  else if (title.includes("Deutschland") || title.includes("Germany") || title.includes("Berlin") || title.includes("Munich") || title.includes("Hamburg")) country = "DACH";
-  else if (title.includes("Österreich") || title.includes("Austria") || title.includes("Wien")) country = "DACH";
-  else if (title.includes("Schweiz") || title.includes("Switzerland") || title.includes("Zürich")) country = "DACH";
-  else if (title.includes("France") || title.includes("Paris") || rawDesc.includes("France")) country = "FR";
-  else if (title.includes("Ireland") || rawDesc.includes("Ireland") || title.includes("Dublin")) country = "IE";
-  else if (title.includes("Spain") || title.includes("España") || title.includes("Madrid") || title.includes("Barcelona")) country = "ES";
-  else if (title.includes("Italy") || title.includes("Italia") || title.includes("Roma") || title.includes("Milano")) country = "IT";
-  else if (title.includes("Poland") || title.includes("Polska") || title.includes("Warszawa")) country = "PL";
-  else if (title.includes("Sweden") || title.includes("Sverige") || title.includes("Stockholm")) country = "SE";
-  else if (title.includes("Netherlands") || title.includes("Nederland") || title.includes("Amsterdam")) country = "NL";
-  else if (title.includes("Belgium") || title.includes("Belgique") || title.includes("Brussels")) country = "BE";
-  else if (title.includes("Norway") || title.includes("Norge") || title.includes("Oslo")) country = "NO";
-  else if (title.includes("Denmark") || title.includes("Danmark") || title.includes("Copenhagen")) country = "DK";
-  else if (title.includes("Finland") || title.includes("Suomi") || title.includes("Helsinki")) country = "FI";
-
-  // AI Scoring (Mock)
-  const aiResult = await calculateMatchScore({
-    title,
-    description_raw: rawDesc,
-    budget
-  }, DEMO_COMPANY);
-
-  // 2. Database Upsert
-  // We check if it exists
-  const existing = await Tender.findOne({ url: uniqueKey });
-
-  if (existing) {
-    // Optional: Update if needed? For now we skip to save writes if unchanged
-    // stats.updated++; // Uncomment if we implement update logic
-    // console.log(`   (Skipping duplicate: ${uniqueKey.substring(0, 40)}...)`);
-    return;
-  }
-
-  await Tender.create({
-    source: sourceLabel,
-    title: title,
-    description_raw: rawDesc,
-    short_description: rawDesc.substring(0, 250) + (rawDesc.length > 250 ? "..." : ""),
-    authority: item.creator || "Public Authority",
-    country: country,
-    deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30), // Default +30 days
-    url: uniqueKey,
-    published_at: pubDate,
-    match_score: aiResult.score,
-    rationale: aiResult.rationale,
-    budget: budget
-  });
-
-  stats.new++;
-
-  // Cache for Limited Mode (No DB) - using file now
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
-  let currentCache = [];
-  try {
-    if (fs.existsSync(TENDERS_FILE)) {
-      currentCache = JSON.parse(fs.readFileSync(TENDERS_FILE, "utf-8"));
-    }
-  } catch (e) { console.warn("Read cache fail", e); }
-
-  // Create deterministic ID so links don't break on restart
-  const stableString = uniqueKey + title;
-  let hash = 0;
-  for (let i = 0; i < stableString.length; i++) {
-    const char = stableString.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  const deterministicId = "det_" + Math.abs(hash).toString(16);
-
-  const newTender = {
-    _id: deterministicId,
-    source: sourceLabel,
-    title: title,
-    description_raw: rawDesc,
-    short_description: rawDesc.substring(0, 250) + "...",
-    authority: item.creator || "Public Authority",
-    country: country,
-    deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
-    url: uniqueKey,
-    published_at: pubDate,
-    match_score: aiResult.score,
-    rationale: aiResult.rationale,
-    budget: budget
-  };
-
-  currentCache.unshift(newTender);
-  if (currentCache.length > 100) currentCache.pop(); // Keep file size sane
-
-  fs.writeFileSync(TENDERS_FILE, JSON.stringify(currentCache, null, 2));
-
-  // Sync global limit for this runtime
-  global.latestTendersCache = currentCache;
-}
-
-module.exports = { ingestFromTED };
+  module.exports = { ingestFromTED };
+  ```

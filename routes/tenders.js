@@ -132,12 +132,11 @@ router.get("/matching", async (req, res) => {
       }
     }
 
-    // ULTIMATE FALLBACK: Use mock data if nothing else works
+    // ULTIMATE FALLBACK: Removed per user request. 
+    // If no data, return empty array rather than mock data.
     if (regionalTenders.length === 0 && dbTenders.length === 0) {
-      const { getMockTenders } = require("../services/mockTenderData");
-      const mockData = getMockTenders();
-      console.log(`[Tenders] Using ${mockData.length} mock tenders as fallback`);
-      return res.json({ tenders: mockData, region, source: "mock" });
+      console.log("[Tenders] No real data available (Mock fallback disabled).");
+      return res.json({ tenders: [], region, source: "live-empty" });
     }
 
     // 4. Combine
