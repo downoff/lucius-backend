@@ -31,6 +31,8 @@ app.use(compression());
 const DEFAULT_WHITELIST = [
   "https://www.ailucius.com",
   "https://ailucius.com",
+  "https://www.aiucius.com", // Typo variant
+  "https://aiucius.com",     // Typo variant
   "http://localhost:5173",
   "http://localhost:5174",
   "https://lucius-frontend.onrender.com",
@@ -43,6 +45,7 @@ const fromEnvMany = (process.env.FRONTEND_ORIGINS || "")
   .map((s) => s.trim())
   .filter(Boolean);
 
+// Remove duplicates
 const ALLOWLIST = Array.from(
   new Set([...DEFAULT_WHITELIST, ...fromEnvMany, fromEnvSingle].filter(Boolean))
 );
