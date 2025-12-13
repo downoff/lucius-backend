@@ -185,6 +185,13 @@ app.get("/api/debug-routes", (req, res) => {
   res.json(routes);
 });
 
+// --- API Routes Mounting ---
+app.use("/api/company", require("./routes/company"));
+app.use("/api/tenders", require("./routes/tenders"));
+app.use("/api/viral", require("./routes/viral-growth"));
+app.use("/api/payments", require("./routes/payments"));
+
+
 // Auto-ingestion on startup (Safe Mode)
 const { ingestFromTED } = require("./services/tenderIngestor");
 
