@@ -34,10 +34,13 @@ const DEMO_COMPANY = {
 function getIngestionConfig() {
   const config = {
     TED_RSS_URLS: [
-      "https://ted.europa.eu/en/rss/search?q=cpv:*", // broad search might be too much, let's try top level categories if possible or just rely on keywords
+      // Broad sectors to get "Global" (EU + GPA) coverage
       "https://ted.europa.eu/en/rss/search?q=sector:services",
       "https://ted.europa.eu/en/rss/search?q=sector:works",
-      "https://ted.europa.eu/en/rss/search?q=sector:supplies"
+      "https://ted.europa.eu/en/rss/search?q=sector:supplies",
+      // Specific high-value keywords for broader reach
+      "https://ted.europa.eu/en/rss/search?q=AI OR artificial intelligence",
+      "https://ted.europa.eu/en/rss/search?q=software OR digital OR platform"
     ],
     UK_CONTRACTS_FINDER_URL: process.env.UK_CONTRACTS_FINDER_URL || "https://www.contractsfinder.service.gov.uk/Published/Feed/Atom",
     MONGO_URI: process.env.MONGO_URI
@@ -76,12 +79,16 @@ async function ingestFromTED() {
 
   // Connect if not connected
   if (mongoose.connection.readyState === 0) {
-    try {
-      await mongoose.connect(config.MONGO_URI);
-      console.log("📦 [Ingest] Connected to MongoDB");
-    } catch (err) {
-      console.error("❌ [Ingest] DB Connection Failed:", err.message);
-      return;
+    if (config.MONGO_URI) {
+      try {
+        await mongoose.connect(config.MONGO_URI);
+        console.log("📦 [Ingest] Connected to MongoDB");
+      } catch (err) {
+        console.error("❌ [Ingest] DB Connection Failed:", err.message);
+        return;
+      }
+    } else {
+      // Limited mode, no DB connection
     }
   }
 
@@ -166,18 +173,22 @@ async function processSingleItem(item, sourceLabel, stats) {
   const budgetMatch = rawDesc.match(/[€£$]\s?[\d,]+(\.\d{2})?/);
   if (budgetMatch) budget = budgetMatch[0];
 
-  // Country Heuristic
-  let country = "EU";
-  // Logic updated to be more specific
-  if (sourceLabel.includes("UK") || title.includes("United Kingdom") || rawDesc.includes("United Kingdom")) country = "UK";
-  else if (title.includes("Deutschland") || title.includes("Germany") || title.includes("Berlin")) country = "DACH";
+  // Country Heuristic (Expanded)
+  if (sourceLabel.includes("UK") || title.includes("United Kingdom") || rawDesc.includes("United Kingdom") || title.includes("London")) country = "UK";
+  else if (title.includes("Deutschland") || title.includes("Germany") || title.includes("Berlin") || title.includes("Munich") || title.includes("Hamburg")) country = "DACH";
+  else if (title.includes("Österreich") || title.includes("Austria") || title.includes("Wien")) country = "DACH";
+  else if (title.includes("Schweiz") || title.includes("Switzerland") || title.includes("Zürich")) country = "DACH";
   else if (title.includes("France") || title.includes("Paris") || rawDesc.includes("France")) country = "FR";
-  else if (title.includes("Ireland") || rawDesc.includes("Ireland")) country = "IE";
-  else if (title.includes("Spain") || title.includes("España") || title.includes("Madrid")) country = "ES";
-  else if (title.includes("Italy") || title.includes("Italia") || title.includes("Roma")) country = "IT";
-  else if (title.includes("Poland") || title.includes("Polska")) country = "PL";
-  else if (title.includes("Sweden") || title.includes("Sverige")) country = "SE";
-  else if (title.includes("Netherlands") || title.includes("Nederland")) country = "NL";
+  else if (title.includes("Ireland") || rawDesc.includes("Ireland") || title.includes("Dublin")) country = "IE";
+  else if (title.includes("Spain") || title.includes("España") || title.includes("Madrid") || title.includes("Barcelona")) country = "ES";
+  else if (title.includes("Italy") || title.includes("Italia") || title.includes("Roma") || title.includes("Milano")) country = "IT";
+  else if (title.includes("Poland") || title.includes("Polska") || title.includes("Warszawa")) country = "PL";
+  else if (title.includes("Sweden") || title.includes("Sverige") || title.includes("Stockholm")) country = "SE";
+  else if (title.includes("Netherlands") || title.includes("Nederland") || title.includes("Amsterdam")) country = "NL";
+  else if (title.includes("Belgium") || title.includes("Belgique") || title.includes("Brussels")) country = "BE";
+  else if (title.includes("Norway") || title.includes("Norge") || title.includes("Oslo")) country = "NO";
+  else if (title.includes("Denmark") || title.includes("Danmark") || title.includes("Copenhagen")) country = "DK";
+  else if (title.includes("Finland") || title.includes("Suomi") || title.includes("Helsinki")) country = "FI";
 
   // AI Scoring (Mock)
   const aiResult = await calculateMatchScore({

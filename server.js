@@ -236,4 +236,17 @@ app.post("/api/admin/ingest", async (req, res) => {
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server listening on port ${PORT} (0.0.0.0)`);
   console.log(`[Startup] Strict CORS enabled. MONGO_URI present: ${!!mongoUri}`);
+
+  // Auto-ingest on startup (fully optional, won't crash server if it fails)
+  try {
+    const { ingestFromTED } = require("./services/tenderIngestor");
+    console.log("🚀 [Startup] Triggering background tender ingestion (non-blocking)...");
+    // Run in true background - don't await, just fire and forget
+    setImmediate(() => {
+      ingestFromTED().catch(err => console.error("❌ [Startup] Ingestion failed:", err));
+    });
+  } catch (requireErr) {
+    console.warn("⚠️ [Startup] Could not load ingestion module:", requireErr.message);
+    console.warn("⚠️ [Startup] Server will continue without auto-ingestion.");
+  }
 });

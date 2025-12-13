@@ -114,8 +114,21 @@ router.get("/matching", async (req, res) => {
       // filter by region if possible, or return all
       dbTenders = global.latestTendersCache;
       if (region && region !== 'UK') {
-        // Basic memory filter
-        //  dbTenders = dbTenders.filter(t => t.country === region); // Optional strictness
+        const targetCountries = {
+          "DACH": ["DACH", "DE", "AT", "CH"],
+          "EU-East": ["PL", "CZ", "HU", "SK", "RO", "BG", "EU-East"],
+          "FR": ["FR"],
+          "US": ["US"],
+          "Middle-East": ["AE", "SA", "QA", "Middle-East"],
+          "Nordics": ["SE", "NO", "DK", "FI"]
+        };
+
+        if (targetCountries[region]) {
+          dbTenders = dbTenders.filter(t => targetCountries[region].includes(t.country));
+        } else {
+          // Fallback: direct match
+          dbTenders = dbTenders.filter(t => t.country === region);
+        }
       }
     }
 
