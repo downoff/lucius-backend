@@ -26,6 +26,7 @@ router.get("/status", async (_req, res) => {
       return res.json({ exists: false });
     }
     return res.json({
+      ok: true,
       exists: true,
       company: {
         id: c._id,

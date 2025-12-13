@@ -27,18 +27,28 @@ app.set("trust proxy", 1);
 app.use(helmet());
 app.use(compression());
 
-// --- CORS: Permissive for Debugging/Production Stability ---
-// Allows any origin that connects to us to receive a response.
-// This fixes the 'No Access-Control-Allow-Origin' error definitively.
-app.use((req, res, next) => {
-  // Log every request to help debug 404s/CORS
-  console.log(`[Request] ${req.method} ${req.url} | Origin: ${req.headers.origin || "None"}`);
-  next();
-});
+// --- CORS: Strict Production Configuration ---
+const ALLOWED_ORIGINS = [
+  "https://www.ailucius.com",
+  "https://ailucius.com",
+  "http://localhost:5173",
+  "http://localhost:5174", // Common alternate dev port
+  "https://lucius-frontend.onrender.com" // Render preview if needed
+];
 
 app.use(
   cors({
-    origin: true, // Reflects the request origin. Allows ALL origins.
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      if (ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn(`[CORS] Blocked request from origin: ${origin}`);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "x-request-id"],
@@ -46,7 +56,16 @@ app.use(
 );
 
 // Explicit preflight handling
-app.options("*", cors({ origin: true, credentials: true }));
+app.options("*", cors({
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true
+}));
 
 // Stripe webhook BEFORE json()
 app.post(
