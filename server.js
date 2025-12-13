@@ -192,29 +192,8 @@ app.use("/api/viral", require("./routes/viral-growth"));
 app.use("/api/payments", require("./routes/payments"));
 
 
-// Auto-ingestion on startup (Safe Mode)
-const { ingestFromTED } = require("./services/tenderIngestor");
-
-// Root Route for Render Health Check
-app.get("/", (req, res) => {
-  res.status(200).send("LuciusAI Backend is Running");
-});
-
 // Explicitly bind to 0.0.0.0 for Render
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server listening on port ${PORT} (0.0.0.0)`);
   console.log(`[Startup] Strict CORS enabled. MONGO_URI present: ${!!mongoUri}`);
-
-  // Trigger background ingestion only if DB is connected
-  // Disabled to prevent startup timeout on Render
-  /*
-  if (mongoUri) {
-    try {
-      console.log("Triggering startup tender ingestion...");
-      ingestFromTED().catch(err => console.error("Startup ingestion failed:", err));
-    } catch (error) {
-      console.error("Failed to trigger startup ingestion:", error);
-    }
-  }
-  */
 });

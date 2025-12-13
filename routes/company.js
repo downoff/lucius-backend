@@ -16,28 +16,31 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Status (for navbar/pricing gating)
+// Status (for navbar gating and health checks)
 router.get("/status", async (_req, res) => {
   try {
-    console.log("[API] GET /company/status hit");
+    // Return simple JSON to satisfy connectivity checks
+    // And include active company if exists for the frontend
     const c = await Company.findOne({ active: true }).sort({ updatedAt: -1 });
-    if (!c) {
-      console.log("[API] No active company found");
-      return res.json({ ok: true, exists: false });
-    }
-    return res.json({
+
+    const response = {
       ok: true,
-      exists: true,
-      company: {
+      service: "lucius-backend",
+      time: new Date().toISOString(),
+      exists: !!c,
+      is_paid: c ? Boolean(c.stripe_customer_id) : false,
+      company: c ? {
         id: c._id,
         company_name: c.company_name,
         stripe_customer_id: c.stripe_customer_id || null,
-      },
-      is_paid: Boolean(c.stripe_customer_id),
-    });
+      } : null
+    };
+
+    return res.json(response);
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ message: "company status error" });
+    console.error("[Company Status Error]", e);
+    // Explicitly return JSON error, never let it default to HTML stack trace
+    return res.status(500).json({ ok: false, message: "company status error", error: String(e) });
   }
 });
 

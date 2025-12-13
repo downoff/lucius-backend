@@ -14,6 +14,33 @@ const Tender = mongoose.models.Tender || require("../models/Tender");
  * - Never crashes on missing data
  */
 const { fetchTendersByRegion } = require("../services/tendersProvider");
+const { ingestFromTED } = require("../services/tenderIngestor");
+
+/**
+ * POST /api/tenders/ingest
+ * Trigger manual ingestion (protected)
+ */
+router.post("/ingest", async (req, res) => {
+  const secret = req.headers["x-ingestion-secret"];
+  const envSecret = process.env.INGESTION_SECRET;
+
+  if (!envSecret || secret !== envSecret) {
+    console.warn(`[Ingest] Unauthorized attempt. IP: ${req.ip}`);
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  console.log("[Ingest] Manual ingestion triggered via API");
+
+  // Start background process
+  ingestFromTED()
+    .then(() => console.log("[Ingest] Background job finished"))
+    .catch(err => console.error("[Ingest] Background job failed:", err));
+
+  return res.json({
+    started: true,
+    message: "Ingestion started in background. Check server logs for details."
+  });
+});
 
 /**
  * GET /api/tenders/matching
