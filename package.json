@@ -27,6 +27,7 @@
     "multer": "^2.0.2",
     "nanoid": "^5.1.5",
     "node-cron": "^4.2.1",
+    "node-fetch": "^2.7.0",
     "openai": "^5.23.2",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",

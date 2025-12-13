@@ -232,25 +232,24 @@ app.post("/api/admin/ingest", async (req, res) => {
 });
 
 
-// Explicitly bind to 0.0.0.0 for Render
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server listening on port ${PORT} (0.0.0.0)`);
   console.log(`[Startup] Strict CORS enabled. MONGO_URI present: ${!!mongoUri}`);
 
-  // Auto-ingestion DISABLED - RSS feeds are returning 404
-  // To manually trigger: POST to /api/admin/ingest with x-admin-key header
-  console.log("ℹ️ [Startup] Auto-ingestion disabled. Use /api/admin/ingest to trigger manually.");
+  // ✅ AUTO-INGESTION ENABLED - Real tender data fetching
+  console.log("🚀 [Startup] Auto-ingestion ENABLED. Triggering background tender fetch...");
 
-  /* COMMENTED OUT - RSS feeds broken
   try {
     const { ingestFromTED } = require("./services/tenderIngestor");
-    console.log("🚀 [Startup] Triggering background tender ingestion (non-blocking)...");
+
+    // Run in background, don't block server startup
     setImmediate(() => {
-      ingestFromTED().catch(err => console.error("❌ [Startup] Ingestion failed:", err));
+      ingestFromTED()
+        .then(() => console.log("✅ [Startup] Initial tender ingestion complete"))
+        .catch(err => console.error("❌ [Startup] Ingestion failed:", err.message));
     });
   } catch (requireErr) {
     console.warn("⚠️ [Startup] Could not load ingestion module:", requireErr.message);
     console.warn("⚠️ [Startup] Server will continue without auto-ingestion.");
   }
-  */
 });

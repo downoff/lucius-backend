@@ -81,14 +81,14 @@ async function ingestFromTED() {
 
   console.log("🚀 [Ingest] Starting Real Tender Ingestion...");
 
-  // 1. Ingest from UK Contracts Finder (OCDS API)
-  // This provides REAL, live data from the UK government
+  // =======================
+  // 1. UK CONTRACTS FINDER (OCDS API)
+  // =======================
   try {
-    const ukUrl = "https://www.contractsfinder.service.gov.uk/Published/Notices/OCDS/Search?limit=30";
+    const ukUrl = "https://www.contractsfinder.service.gov.uk/Published/Notices/OCDS/Search?limit=50";
     console.log(`📡 [UK-API] Fetching real tenders from: ${ukUrl}`);
 
-    // Use native fetch (Node 18+) or fallback
-    const response = await (global.fetch || fetch)(ukUrl);
+    const response = await fetch(ukUrl);
 
     if (!response.ok) {
       throw new Error(`UK API returned ${response.status}`);
@@ -100,9 +100,7 @@ async function ingestFromTED() {
     if (data.results) {
       for (const notice of data.results) {
         try {
-          // OCDS Format Handling
-          // Releases is an array, take the latest
-          const latestRelease = notice.releases?.[0]; // Usually just one in search results
+          const latestRelease = notice.releases?.[0];
           if (!latestRelease) continue;
 
           const tenderInfo = latestRelease.tender || {};
@@ -112,21 +110,27 @@ async function ingestFromTED() {
             title: tenderInfo.title || "Untitled Tender",
             description_raw: tenderInfo.description || "",
             authority: buyer.name || "Public Authority",
-            country: "UK", // It's the UK feed
-            deadline: tenderInfo.tenderPeriod?.endDate ? new Date(tenderInfo.tenderPeriod.endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-            url: latestRelease.id ? `https://www.contractsfinder.service.gov.uk/Notice/${latestRelease.id}` : "", // Construct URL
+            country: "UK",
+            region: "UK",
+            deadline: tenderInfo.tenderPeriod?.endDate
+              ? new Date(tenderInfo.tenderPeriod.endDate)
+              : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            url: latestRelease.id
+              ? `https://www.contractsfinder.service.gov.uk/Notice/${latestRelease.id}`
+              : "",
             published_at: latestRelease.date ? new Date(latestRelease.date) : new Date(),
-            budget: tenderInfo.value?.amount ? `£${tenderInfo.value.amount.toLocaleString()}` : "N/A"
+            budget: tenderInfo.value?.amount
+              ? `£${tenderInfo.value.amount.toLocaleString()}`
+              : "N/A"
           };
 
-          // Generate score
+          // Generate AI score
           const aiResult = await calculateMatchScore({
             title: tenderObj.title,
             description_raw: tenderObj.description_raw,
             budget: tenderObj.budget
           }, DEMO_COMPANY);
 
-          // Save to Mock Cache/DB equivalent
           const finalTender = {
             ...tenderObj,
             _id: "uk_" + (latestRelease.id || Math.random().toString(36).substr(2, 9)),
@@ -135,7 +139,6 @@ async function ingestFromTED() {
             source: "UK-Official"
           };
 
-          // Update generic cache
           await addToCache(finalTender);
           stats.new++;
           stats.processed++;
@@ -152,13 +155,36 @@ async function ingestFromTED() {
     stats.errors++;
   }
 
-  // 2. Mock Data Fallback (for demo variety if UK fails or is filtered)
-  // We keep this to ensure the "Pitch Deck" always has "International" looking data
-  // But we label it clearly if we must.
-  // Actually, let's rely on the mockTenderData service we created earlier as a backup in the ROUTE,
-  // not here in the ingestor. The ingestor should focus on REAL data.
+  // =======================
+  // 2. TED (TENDERS ELECTRONIC DAILY) - EU
+  // =======================
+  try {
+    // Use TED's public API v3 for European tenders
+    const tedUrl = "https://publications.europa.eu/resource/authority/contract-type";
+    console.log(`📡 [TED-EU] Attempting EU tender fetch...`);
+
+    // Note: TED requires specific API keys and has rate limits
+    // For now, we'll use a public search endpoint
+    // TODO: Register for TED API access at https://ted.europa.eu/en/api
+
+    console.log("ℹ️ [TED-EU] TED API requires registration. Skipping for now.");
+    console.log("ℹ️ [TED-EU] To enable: Register at https://ted.europa.eu/en/api");
+
+  } catch (err) {
+    console.error("❌ [TED-EU] Failed:", err.message);
+    stats.errors++;
+  }
+
+  // =======================
+  // 3. MOCK INTERNATIONAL DATA (Temporary)
+  // =======================
+  // User requested NO mock data, so we skip this entirely
+  console.log("ℹ️ [Mock Data] Skipped per user requirement (real data only)");
 
   console.log(`🎉 Ingestion Finished. Stats:`, stats);
+  console.log(`   ✅ Processed: ${stats.processed}`);
+  console.log(`   🆕 New: ${stats.new}`);
+  console.log(`   ❌ Errors: ${stats.errors}`);
 }
 
 // Helper to save to file cache (mimicking DB for now to be safe/fast)
