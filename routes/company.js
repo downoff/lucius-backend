@@ -19,8 +19,12 @@ router.post("/", async (req, res) => {
 // Status (for navbar/pricing gating)
 router.get("/status", async (_req, res) => {
   try {
+    console.log("[API] GET /company/status hit");
     const c = await Company.findOne({ active: true }).sort({ updatedAt: -1 });
-    if (!c) return res.json({ exists: false });
+    if (!c) {
+      console.log("[API] No active company found");
+      return res.json({ exists: false });
+    }
     return res.json({
       exists: true,
       company: {

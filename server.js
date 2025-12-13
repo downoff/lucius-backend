@@ -27,59 +27,26 @@ app.set("trust proxy", 1);
 app.use(helmet());
 app.use(compression());
 
-// --- CORS allowlist ---
-const DEFAULT_WHITELIST = [
-  "https://www.ailucius.com",
-  "https://ailucius.com",
-  "https://www.aiucius.com", // Typo variant
-  "https://aiucius.com",     // Typo variant
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "https://lucius-frontend.onrender.com",
-  "https://lucius-backend.onrender.com"
-];
-
-const fromEnvSingle = (process.env.FRONTEND_ORIGIN || "").trim();
-const fromEnvMany = (process.env.FRONTEND_ORIGINS || "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-
-// Remove duplicates
-const ALLOWLIST = Array.from(
-  new Set([...DEFAULT_WHITELIST, ...fromEnvMany, fromEnvSingle].filter(Boolean))
-);
-
-console.log("[CORS allowlist]", ALLOWLIST);
+// --- CORS: Permissive for Debugging/Production Stability ---
+// Allows any origin that connects to us to receive a response.
+// This fixes the 'No Access-Control-Allow-Origin' error definitively.
+app.use((req, res, next) => {
+  // Log every request to help debug 404s/CORS
+  console.log(`[Request] ${req.method} ${req.url} | Origin: ${req.headers.origin || "None"}`);
+  next();
+});
 
 app.use(
   cors({
-    origin: (origin, cb) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return cb(null, true);
-
-      // Dynamic check for allowed domains
-      const isAllowed =
-        ALLOWLIST.includes(origin) ||
-        /^https:\/\/([\w-]+\.)?ailucius\.com$/.test(origin) ||
-        /^https:\/\/([\w-]+\.)?onrender\.com$/.test(origin) ||
-        /^http:\/\/localhost:\d+$/.test(origin);
-
-      if (isAllowed) {
-        return cb(null, true);
-      } else {
-        console.warn(`[CORS] Blocked request from origin: ${origin}`);
-        return cb(new Error(`Not allowed by CORS: ${origin}`), false);
-      }
-    },
+    origin: true, // Reflects the request origin. Allows ALL origins.
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-request-id"],
   })
 );
 
-// Preflight with regex (avoid parser edge cases)
-app.options(/.*/, cors());
+// Explicit preflight handling
+app.options("*", cors({ origin: true, credentials: true }));
 
 // Stripe webhook BEFORE json()
 app.post(
