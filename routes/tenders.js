@@ -26,19 +26,24 @@ router.get("/matching", async (req, res) => {
   try {
     const region = req.query.region || "UK";
 
-    // 1. Fetch tenders for the requested region
-    // (Real data for UK, realistic stubs for others)
-    const regionalTenders = await fetchTendersByRegion(region);
+    // 1. Fetch tenders for the requested region (External Source)
+    let regionalTenders = [];
+    try {
+      regionalTenders = await fetchTendersByRegion(region);
+    } catch (fetchErr) {
+      console.warn(`[Warning] External tender fetch failed for ${region}:`, fetchErr.message);
+      // Continue to load from DB even if external fetch fails
+    }
 
     // 2. Fetch local DB tenders (if any)
-    // TODO: Filter DB tenders by region once we have that field in the schema
     const dbTenders = await Tender.find({})
       .sort({ createdAt: -1 })
-      .limit(10)
+      .limit(50) // Increased limit to seeing more ingested data
       .lean()
       .exec();
 
-    // 3. Combine (Regional first)
+    // 3. Combine (Deduplicate based on ID or URL if needed, mostly handled by frontend key)
+    // For now simple concat is fine as they come from different sources usually
     const combined = [...regionalTenders, ...dbTenders];
 
     return res.json({ tenders: combined, region });
