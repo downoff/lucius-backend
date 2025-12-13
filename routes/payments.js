@@ -3,7 +3,17 @@ const router = require("express").Router();
 const Company = require("../models/Company");
 const Stripe = require("stripe");
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+let stripe;
+if (process.env.STRIPE_SECRET_KEY) {
+  stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+} else {
+  // Mock bare minimum to export valid router
+  stripe = {
+    checkout: { sessions: { create: async () => { throw new Error("Stripe not configured"); } } },
+    billingPortal: { sessions: { create: async () => { throw new Error("Stripe not configured"); } } },
+    customers: { create: async () => { throw new Error("Stripe not configured"); } }
+  };
+}
 
 function frontendBase() {
   const f =

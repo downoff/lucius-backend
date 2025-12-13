@@ -4,7 +4,13 @@ const Tender = require("../models/Tender");
 const { calculateMatchScore } = require("./scoring");
 
 // Ensure environment variables are loaded
+// Ensure environment variables are loaded
 require("dotenv").config();
+const fs = require("fs");
+const path = require("path");
+
+const DATA_DIR = path.join(__dirname, "../data");
+const TENDERS_FILE = path.join(DATA_DIR, "tenders.json");
 
 const parser = new Parser({
   // Add timeout to parser request
@@ -28,8 +34,10 @@ const DEMO_COMPANY = {
 function getIngestionConfig() {
   const config = {
     TED_RSS_URLS: [
-      "https://ted.europa.eu/en/rss/search?q=cpv:72*", // IT Services
-      "https://ted.europa.eu/en/rss/search?q=cpv:79*"  // Business Services
+      "https://ted.europa.eu/en/rss/search?q=cpv:*", // broad search might be too much, let's try top level categories if possible or just rely on keywords
+      "https://ted.europa.eu/en/rss/search?q=sector:services",
+      "https://ted.europa.eu/en/rss/search?q=sector:works",
+      "https://ted.europa.eu/en/rss/search?q=sector:supplies"
     ],
     UK_CONTRACTS_FINDER_URL: process.env.UK_CONTRACTS_FINDER_URL || "https://www.contractsfinder.service.gov.uk/Published/Feed/Atom",
     MONGO_URI: process.env.MONGO_URI
@@ -61,8 +69,9 @@ function getIngestionConfig() {
 async function ingestFromTED() {
   const config = getIngestionConfig();
   if (!config.MONGO_URI) {
-    console.error("❌ Aborting ingestion: Database connection impossible.");
-    return;
+    console.warn("❌ MISSING ENV: MONGO_URI");
+    console.warn("⚠️  Running in LIMITED MODE (In-Memory Cache Only). Tenders will not be saved to DB.");
+    // Do NOT return; allow fetching
   }
 
   // Connect if not connected
@@ -159,9 +168,16 @@ async function processSingleItem(item, sourceLabel, stats) {
 
   // Country Heuristic
   let country = "EU";
-  if (sourceLabel.includes("UK")) country = "UK";
-  if (title.includes("Deutschland") || title.includes("Germany")) country = "DACH";
-  if (title.includes("France")) country = "FR";
+  // Logic updated to be more specific
+  if (sourceLabel.includes("UK") || title.includes("United Kingdom") || rawDesc.includes("United Kingdom")) country = "UK";
+  else if (title.includes("Deutschland") || title.includes("Germany") || title.includes("Berlin")) country = "DACH";
+  else if (title.includes("France") || title.includes("Paris") || rawDesc.includes("France")) country = "FR";
+  else if (title.includes("Ireland") || rawDesc.includes("Ireland")) country = "IE";
+  else if (title.includes("Spain") || title.includes("España") || title.includes("Madrid")) country = "ES";
+  else if (title.includes("Italy") || title.includes("Italia") || title.includes("Roma")) country = "IT";
+  else if (title.includes("Poland") || title.includes("Polska")) country = "PL";
+  else if (title.includes("Sweden") || title.includes("Sverige")) country = "SE";
+  else if (title.includes("Netherlands") || title.includes("Nederland")) country = "NL";
 
   // AI Scoring (Mock)
   const aiResult = await calculateMatchScore({
@@ -197,7 +213,50 @@ async function processSingleItem(item, sourceLabel, stats) {
   });
 
   stats.new++;
-  // process.stdout.write("+");
+
+  // Cache for Limited Mode (No DB) - using file now
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+  let currentCache = [];
+  try {
+    if (fs.existsSync(TENDERS_FILE)) {
+      currentCache = JSON.parse(fs.readFileSync(TENDERS_FILE, "utf-8"));
+    }
+  } catch (e) { console.warn("Read cache fail", e); }
+
+  // Create deterministic ID so links don't break on restart
+  const stableString = uniqueKey + title;
+  let hash = 0;
+  for (let i = 0; i < stableString.length; i++) {
+    const char = stableString.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  const deterministicId = "det_" + Math.abs(hash).toString(16);
+
+  const newTender = {
+    _id: deterministicId,
+    source: sourceLabel,
+    title: title,
+    description_raw: rawDesc,
+    short_description: rawDesc.substring(0, 250) + "...",
+    authority: item.creator || "Public Authority",
+    country: country,
+    deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
+    url: uniqueKey,
+    published_at: pubDate,
+    match_score: aiResult.score,
+    rationale: aiResult.rationale,
+    budget: budget
+  };
+
+  currentCache.unshift(newTender);
+  if (currentCache.length > 100) currentCache.pop(); // Keep file size sane
+
+  fs.writeFileSync(TENDERS_FILE, JSON.stringify(currentCache, null, 2));
+
+  // Sync global limit for this runtime
+  global.latestTendersCache = currentCache;
 }
 
 module.exports = { ingestFromTED };

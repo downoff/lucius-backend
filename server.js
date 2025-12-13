@@ -14,7 +14,17 @@ const sgMail = require("@sendgrid/mail");
 const Stripe = require("stripe");
 const Company = require("./models/Company");
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+let stripe;
+if (process.env.STRIPE_SECRET_KEY) {
+  stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+} else {
+  console.warn("⚠️  STRIPE_SECRET_KEY not set. Payments will fail.");
+  // Mock stripe object to prevent crash on usage, or strict blocking?
+  // For now let's just leave it undefined and handle usage sites.
+  stripe = {
+    webhooks: { constructEvent: () => { throw new Error("Stripe not configured"); } }
+  };
+}
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -46,6 +56,11 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
+
+      // In development (localhost), allow all
+      if (process.env.NODE_ENV !== 'production' || origin.includes('localhost')) {
+        return callback(null, true);
+      }
 
       if (ALLOWED_ORIGINS.includes(origin)) {
         callback(null, true);
@@ -124,23 +139,28 @@ app.post(
 
 app.use(express.json());
 
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "dev_fallback_secret_change_me",
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGO_URI,
-      ttl: 60 * 60 * 24 * 14, // 14 days
-    }),
-    cookie: {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-    },
-  })
-);
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || "dev_fallback_secret_change_me",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+  },
+};
+
+if (process.env.MONGO_URI) {
+  sessionConfig.store = MongoStore.create({
+    mongoUrl: process.env.MONGO_URI,
+    ttl: 60 * 60 * 24 * 14, // 14 days
+  });
+} else {
+  console.warn("⚠️  MONGO_URI not set. Using MemoryStore for sessions (not persistent).");
+}
+
+app.use(session(sessionConfig));
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -195,6 +215,21 @@ app.use("/api/company", require("./routes/company"));
 app.use("/api/tenders", require("./routes/tenders"));
 app.use("/api/viral", require("./routes/viral-growth"));
 app.use("/api/payments", require("./routes/payments"));
+app.use("/api/scoring", require("./routes/scoring"));
+
+// Admin Trigger for Ingestion (Temporary/Dev)
+app.post("/api/admin/ingest", async (req, res) => {
+  // Basic protection (optional, for now open in dev)
+  // if (req.headers['x-admin-key'] !== process.env.ADMIN_KEY) return res.status(403).send("Unauthorized");
+
+  const { ingestFromTED } = require("./services/tenderIngestor");
+  console.log("Manual ingestion triggered...");
+
+  // Run in background
+  ingestFromTED().catch(err => console.error("Ingestion failed:", err));
+
+  res.json({ message: "Ingestion started in background" });
+});
 
 
 // Explicitly bind to 0.0.0.0 for Render

@@ -15,6 +15,19 @@ const Tender = mongoose.models.Tender || require("../models/Tender");
  */
 const { fetchTendersByRegion } = require("../services/tendersProvider");
 const { ingestFromTED } = require("../services/tenderIngestor");
+const fs = require("fs");
+const path = require("path");
+
+const DATA_DIR = path.join(__dirname, "../data");
+const TENDERS_FILE = path.join(DATA_DIR, "tenders.json");
+
+// Load persist cache on start
+try {
+  if (fs.existsSync(TENDERS_FILE)) {
+    global.latestTendersCache = JSON.parse(fs.readFileSync(TENDERS_FILE, "utf-8"));
+    console.log(`[Tenders] Loaded ${global.latestTendersCache.length} tenders from persistent file.`);
+  }
+} catch (e) { console.warn("[Tenders] Failed to load local cache file", e); }
 
 /**
  * POST /api/tenders/ingest
@@ -54,8 +67,15 @@ router.get("/matching", async (req, res) => {
     const region = req.query.region || "UK";
 
     // 1. Fetch active company for personalized matching
+    // 1. Fetch active company for personalized matching
     const Company = require("../models/Company");
-    const activeCompany = await Company.findOne({ active: true }).lean().exec();
+    let activeCompany = null;
+
+    if (mongoose.connection.readyState === 1) {
+      try {
+        activeCompany = await Company.findOne({ active: true }).lean().exec();
+      } catch (e) { console.warn("Company fetch failed", e); }
+    }
 
     // Fallback if no company is set yet (prevent crash, allows "browse mode")
     const companyContext = activeCompany || {
@@ -74,11 +94,30 @@ router.get("/matching", async (req, res) => {
     }
 
     // 3. Fetch local DB tenders (if any)
-    const dbTenders = await Tender.find({})
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .lean()
-      .exec();
+    let dbTenders = [];
+    try {
+      if (mongoose.connection.readyState === 1) {
+        dbTenders = await Tender.find({})
+          .sort({ createdAt: -1 })
+          .limit(50)
+          .lean()
+          .exec();
+      } else {
+        console.warn("[Tenders] DB not connected, using cache.");
+      }
+    } catch (e) {
+      console.warn("[Tenders] DB fetch failed, using cache.");
+    }
+
+    // Fallback to memory cache if DB is empty (Limited Mode)
+    if (dbTenders.length === 0 && global.latestTendersCache) {
+      // filter by region if possible, or return all
+      dbTenders = global.latestTendersCache;
+      if (region && region !== 'UK') {
+        // Basic memory filter
+        //  dbTenders = dbTenders.filter(t => t.country === region); // Optional strictness
+      }
+    }
 
     // 4. Combine
     const combined = [...regionalTenders, ...dbTenders];
@@ -100,8 +139,32 @@ router.get("/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Support for in-memory IDs (Limited Mode)
+    // Support for in-memory IDs (Limited Mode)
+    // Support for in-memory/deterministic IDs (Limited Mode)
+    if (id.startsWith("mem_") || id.startsWith("det_")) {
+      console.log(`[Diff Debug] Looking for in-memory ID: ${id}`);
+      if (!global.latestTendersCache) {
+        console.log("[Diff Debug] Cache is empty/undefined");
+        return res.status(404).json({ message: "Tender not found (cache empty)" });
+      }
+      console.log(`[Diff Debug] Cache size: ${global.latestTendersCache.length}`);
+      const cachedTender = global.latestTendersCache.find(t => t._id === id);
+      if (cachedTender) {
+        console.log("[Diff Debug] Found in cache!");
+        return res.json(cachedTender);
+      }
+      console.log("[Diff Debug] Not found in cache.");
+      return res.status(404).json({ message: "Tender not found in cache" });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid tender id" });
+    }
+
+    // Check connection before query to avoid timeout
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ message: "Database not connected" });
     }
 
     const tender = await Tender.findById(id).lean().exec();

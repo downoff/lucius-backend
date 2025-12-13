@@ -21,7 +21,19 @@ router.get("/status", async (_req, res) => {
   try {
     // Return simple JSON to satisfy connectivity checks
     // And include active company if exists for the frontend
-    const c = await Company.findOne({ active: true }).sort({ updatedAt: -1 });
+    const mongoose = require("mongoose");
+    let c = null;
+
+    if (mongoose.connection.readyState === 1) {
+      c = await Company.findOne({ active: true }).sort({ updatedAt: -1 });
+    } else {
+      // Mock response for Limited Mode
+      c = {
+        _id: "limited_mode_guest",
+        company_name: "Guest (Limited Mode)",
+        stripe_customer_id: null
+      };
+    }
 
     const response = {
       ok: true,
@@ -39,7 +51,7 @@ router.get("/status", async (_req, res) => {
     return res.json(response);
   } catch (e) {
     console.error("[Company Status Error]", e);
-    // Explicitly return JSON error, never let it default to HTML stack trace
+    // Explicitly return JSON error
     return res.status(500).json({ ok: false, message: "company status error", error: String(e) });
   }
 });
