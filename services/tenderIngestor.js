@@ -167,32 +167,27 @@ async function addToCache(tender) {
 
   let currentCache = [];
   try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
-    let currentCache = [];
-    try {
-      if (fs.existsSync(TENDERS_FILE)) {
-        currentCache = JSON.parse(fs.readFileSync(TENDERS_FILE, "utf-8"));
-      }
-    } catch (e) { }
-
-    // Dedup by URL or title
-    const exists = currentCache.find(t => t.url === tender.url || (t.title === tender.title && t.authority === tender.authority));
-    if (!exists) {
-      // Add new at top
-      currentCache.unshift(tender);
-      // Keep file size manageable (200 max)
-      if (currentCache.length > 200) currentCache = currentCache.slice(0, 200);
-      fs.writeFileSync(TENDERS_FILE, JSON.stringify(currentCache, null, 2));
-
-      // Update memory cache immediately
-      global.latestTendersCache = currentCache;
+    if (fs.existsSync(TENDERS_FILE)) {
+      currentCache = JSON.parse(fs.readFileSync(TENDERS_FILE, "utf-8"));
     }
+  } catch (e) { }
+
+  // Dedup by URL or title
+  const exists = currentCache.find(t => t.url === tender.url || (t.title === tender.title && t.authority === tender.authority));
+  if (!exists) {
+    // Add new at top
+    currentCache.unshift(tender);
+    // Keep file size manageable (200 max)
+    if (currentCache.length > 200) currentCache = currentCache.slice(0, 200);
+    fs.writeFileSync(TENDERS_FILE, JSON.stringify(currentCache, null, 2));
+
+    // Update memory cache immediately
+    global.latestTendersCache = currentCache;
   }
+}
 
 // Stub out legacy functions so we don't crash if called
 async function fetchAndProcessFeed(url, sourceLabel, stats) { }
-  async function processSingleItem(item, sourceLabel, stats) { }
+async function processSingleItem(item, sourceLabel, stats) { }
 
-  module.exports = { ingestFromTED };
-  ```
+module.exports = { ingestFromTED };
