@@ -214,8 +214,19 @@ app.use((err, req, res, _next) => {
 });
 /* eslint-enable no-unused-vars */
 
-app.listen(PORT, () => {
+// Auto-ingestion on startup
+const { ingestFromTED } = require("./services/tenderIngestor");
+app.listen(PORT, async () => {
   console.log(
     `Server listening at http://localhost:${PORT} or on Render`
   );
+
+  // Trigger background ingestion to ensure fresh data
+  try {
+    console.log("Triggering startup tender ingestion...");
+    // Run in background, don't await blocking the port listen
+    ingestFromTED().catch(err => console.error("Startup ingestion failed:", err));
+  } catch (error) {
+    console.error("Failed to trigger startup ingestion:", error);
+  }
 });
