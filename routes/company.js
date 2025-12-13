@@ -23,7 +23,7 @@ router.get("/status", async (_req, res) => {
     const c = await Company.findOne({ active: true }).sort({ updatedAt: -1 });
     if (!c) {
       console.log("[API] No active company found");
-      return res.json({ exists: false });
+      return res.json({ ok: true, exists: false });
     }
     return res.json({
       ok: true,

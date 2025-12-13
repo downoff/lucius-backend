@@ -16,9 +16,8 @@ const TED_FEEDS = [
   // "https://ted.europa.eu/en/rss/search?q=cpv:79*"
 ];
 
-// Fallback/Demo Feed (UK Contracts Finder if TED is flaky)
-// const UK_FEED = "https://www.contractsfinder.service.gov.uk/Search/RSS.xml";
-const UK_FEED = ""; // Disabled due to 404s
+// Fallback/Demo Feed (UK Contracts Finder)
+const UK_FEED = "https://www.contractsfinder.service.gov.uk/Search/RSS.xml";
 
 const DEMO_COMPANY = {
   company_name: "LuciusAI User",

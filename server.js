@@ -193,11 +193,14 @@ app.get("/", (req, res) => {
   res.status(200).send("LuciusAI Backend is Running");
 });
 
-app.listen(PORT, async () => {
-  console.log(`Server listening at http://localhost:${PORT} or on Render`);
+// Explicitly bind to 0.0.0.0 for Render
+app.listen(PORT, "0.0.0.0", async () => {
+  console.log(`Server listening on port ${PORT} (0.0.0.0)`);
   console.log(`[Startup] Strict CORS enabled. MONGO_URI present: ${!!mongoUri}`);
 
   // Trigger background ingestion only if DB is connected
+  // Disabled to prevent startup timeout on Render
+  /*
   if (mongoUri) {
     try {
       console.log("Triggering startup tender ingestion...");
@@ -206,4 +209,5 @@ app.listen(PORT, async () => {
       console.error("Failed to trigger startup ingestion:", error);
     }
   }
+  */
 });
