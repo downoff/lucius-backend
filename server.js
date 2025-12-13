@@ -30,9 +30,11 @@ app.use(compression());
 // --- CORS allowlist ---
 const DEFAULT_WHITELIST = [
   "https://www.ailucius.com",
+  "https://ailucius.com",
   "http://localhost:5173",
   "http://localhost:5174",
-  "https://lucius-frontend.onrender.com", // Add your Render frontend URL here
+  "https://lucius-frontend.onrender.com",
+  "https://lucius-backend.onrender.com"
 ];
 
 const fromEnvSingle = (process.env.FRONTEND_ORIGIN || "").trim();
