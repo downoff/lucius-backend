@@ -19,6 +19,11 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// Render Health Check - Must be top-level to bypass middleware dependencies
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 }
