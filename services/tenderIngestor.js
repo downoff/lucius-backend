@@ -11,13 +11,14 @@ const parser = new Parser();
 // TED RSS Feeds (High value sectors: IT, Business Services)
 const TED_FEEDS = [
   // IT Services: 72000000
-  "https://ted.europa.eu/en/rss/search?q=cpv:72*",
+  // "https://ted.europa.eu/en/rss/search?q=cpv:72*", 
   // Business Services: 79000000
-  "https://ted.europa.eu/en/rss/search?q=cpv:79*"
+  // "https://ted.europa.eu/en/rss/search?q=cpv:79*"
 ];
 
 // Fallback/Demo Feed (UK Contracts Finder if TED is flaky)
-const UK_FEED = "https://www.contractsfinder.service.gov.uk/Search/RSS.xml";
+// const UK_FEED = "https://www.contractsfinder.service.gov.uk/Search/RSS.xml";
+const UK_FEED = ""; // Disabled due to 404s
 
 const DEMO_COMPANY = {
   company_name: "LuciusAI User",

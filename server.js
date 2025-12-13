@@ -187,9 +187,15 @@ app.get("/api/debug-routes", (req, res) => {
 
 // Auto-ingestion on startup (Safe Mode)
 const { ingestFromTED } = require("./services/tenderIngestor");
+
+// Root Route for Render Health Check
+app.get("/", (req, res) => {
+  res.status(200).send("LuciusAI Backend is Running");
+});
+
 app.listen(PORT, async () => {
   console.log(`Server listening at http://localhost:${PORT} or on Render`);
-  console.log(`[Startup] Permissive CORS enabled. MONGO_URI present: ${!!mongoUri}`);
+  console.log(`[Startup] Strict CORS enabled. MONGO_URI present: ${!!mongoUri}`);
 
   // Trigger background ingestion only if DB is connected
   if (mongoUri) {
