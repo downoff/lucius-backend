@@ -121,95 +121,64 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-// DB
-if (!process.env.MONGO_URI) {
-  console.warn("⚠️  MONGO_URI not set.");
+// DB Connection with Crash Prevention
+const mongoUri = process.env.MONGO_URI;
+if (!mongoUri) {
+  console.warn("⚠️  MONGO_URI not set. Skipping DB connection. App will run in limited mode.");
+} else {
+  mongoose
+    .connect(mongoUri, { autoIndex: true })
+    .then(() => console.log("MongoDB Connected"))
+    .catch((err) => console.error("MongoDB Connection Error:", err));
 }
-mongoose
-  .connect(process.env.MONGO_URI, { autoIndex: true })
-  .then(() => console.log("MongoDB Connected"))
-  .catch((err) => console.error("MongoDB error:", err));
 
-// Health
-app.get("/health", (_req, res) =>
-  res
-    .status(200)
-    .json({ status: "ok", message: "Lucius AI backend is healthy." })
-);
-
-// Public limiter (stricter)
-const publicApiLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { message: "Too many requests, please try again later." }
-});
-app.use("/api/public", publicApiLimiter);
-
-// General API limiter (protects AI endpoints)
-const generalApiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use("/api", generalApiLimiter);
-
-// ===== ROUTES (ALL RELATIVE PATHS) =====
-app.use("/api/public", require("./routes/marketing"));
-app.use("/api/admin", require("./routes/admin"));
-app.use("/api/company", require("./routes/company"));
-app.use("/api/tenders", require("./routes/tenders"));
-app.use("/api/ai-tender", require("./routes/tender-ai"));
-app.use("/api/payments", require("./routes/payments"));
-app.use("/api/tender", require("./routes/tender-copilot"));
-app.use("/api/referrals", require("./routes/referrals"));
-app.use("/api/team", require("./routes/team"));
-app.use("/api/enterprise", require("./routes/enterprise"));
-app.use("/api/auto-content", require("./routes/auto-content-api"));
-app.use("/api/lead-magnet", require("./routes/auto-lead-magnet"));
-app.use("/api/analytics", require("./routes/analytics"));
-app.use("/api/success", require("./routes/success-metrics"));
-app.use("/api/templates", require("./routes/templates"));
-app.use("/api/automation", require("./routes/automation-triggers"));
-app.use("/api/growth", require("./routes/viral-growth"));
-app.use("/api/tools", require("./routes/bid-scorer"));
-
-// Programmatic SEO routes
-app.use("/ai-tender-writing", require("./routes/seo-pages"));
-
-// 404
-app.use("/api", (_req, res) => res.status(404).json({ message: "Not found" }));
-
-// Errors
-/* eslint-disable no-unused-vars */
-app.use((err, req, res, _next) => {
-  const timestamp = new Date().toISOString();
-  console.error(`[${timestamp}] Error in ${req.method} ${req.url}:`);
-  console.error(err?.stack || err?.message || err);
-
-  res.status(500).json({
-    message: "Server error",
-    requestId: req.headers['x-request-id'] || Date.now().toString(),
-    detail: process.env.NODE_ENV === "production" ? undefined : String(err),
+// Health Check (No DB dependency)
+app.get("/api/health-check", (req, res) => {
+  res.json({
+    status: "ok",
+    timestamp: new Date(),
+    cors_origin: req.headers.origin,
+    env_has_mongo: !!process.env.MONGO_URI
   });
 });
-/* eslint-enable no-unused-vars */
 
-// Auto-ingestion on startup
+// CORS Debug Endpoint
+app.get("/api/cors-debug", (req, res) => {
+  res.json({ message: "CORS is working if you see this." });
+});
+
+// Route Debugger: Dump all registered routes to console on request
+app.get("/api/debug-routes", (req, res) => {
+  const routes = [];
+  app._router.stack.forEach((middleware) => {
+    if (middleware.route) { // routes registered directly on the app
+      routes.push(`${Object.keys(middleware.route.methods).join(', ').toUpperCase()} ${middleware.route.path}`);
+    } else if (middleware.name === 'router') { // router middleware 
+      middleware.handle.stack.forEach((handler) => {
+        if (handler.route) {
+          const baseUrl = middleware.regexp.source.replace("^\\", "").replace("\\/?(?=\\/|$)", "").replace(/\\\//g, "/");
+          routes.push(`${Object.keys(handler.route.methods).join(', ').toUpperCase()} ${baseUrl}${handler.route.path}`);
+        }
+      });
+    }
+  });
+  console.log("Registered Routes:", routes);
+  res.json(routes);
+});
+
+// Auto-ingestion on startup (Safe Mode)
 const { ingestFromTED } = require("./services/tenderIngestor");
 app.listen(PORT, async () => {
-  console.log(
-    `Server listening at http://localhost:${PORT} or on Render`
-  );
+  console.log(`Server listening at http://localhost:${PORT} or on Render`);
+  console.log(`[Startup] Permissive CORS enabled. MONGO_URI present: ${!!mongoUri}`);
 
-  // Trigger background ingestion to ensure fresh data
-  try {
-    console.log("Triggering startup tender ingestion...");
-    // Run in background, don't await blocking the port listen
-    ingestFromTED().catch(err => console.error("Startup ingestion failed:", err));
-  } catch (error) {
-    console.error("Failed to trigger startup ingestion:", error);
+  // Trigger background ingestion only if DB is connected
+  if (mongoUri) {
+    try {
+      console.log("Triggering startup tender ingestion...");
+      ingestFromTED().catch(err => console.error("Startup ingestion failed:", err));
+    } catch (error) {
+      console.error("Failed to trigger startup ingestion:", error);
+    }
   }
 });
