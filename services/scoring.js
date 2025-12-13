@@ -17,19 +17,24 @@ async function calculateMatchScore(tender, company) {
     }
 
     try {
+        const title = tender?.title || "Untitled Tender";
+        const desc = tender?.description_raw || tender?.short_description || "No description provided.";
+
         const tenderText = `
-Title: ${tender.title}
-Description: ${tender.description_raw || tender.short_description}
-Budget: ${tender.budget || "Unknown"}
-Region: ${tender.region || tender.country || "Unknown"}
+Title: ${title}
+Description: ${desc}
+Budget: ${tender?.budget || "Unknown"}
+Region: ${tender?.region || tender?.country || "Unknown"}
 `;
 
+        const companyName = company?.company_name || "Generic Company";
+        const keywords = Array.isArray(company?.keywords_include) ? company.keywords_include.join(", ") : "";
+        const capabilities = company?.description || "General Services";
+
         const companyProfile = `
-Name: ${company.company_name || "Generic Company"}
-Keywords Include: ${(company.keywords_include || []).join(", ")}
-Keywords Exclude: ${(company.keywords_exclude || []).join(", ")}
-CPV Codes: ${(company.cpv_codes || []).join(", ")}
-Capabilities: ${company.description || "General IT Services"}
+Name: ${companyName}
+Keywords Include: ${keywords}
+Capabilities: ${capabilities}
 `;
 
         const prompt = `
