@@ -69,46 +69,131 @@ function getIngestionConfig() {
   return config;
 }
 
+const fetch = require('node-fetch'); // Ensure node-fetch is available or use native fetch in Node 18+
+
+// ... imports remain the same
+
 async function ingestFromTED() {
   const config = getIngestionConfig();
-  if (!config.MONGO_URI) {
-    console.warn("❌ MISSING ENV: MONGO_URI");
-    console.warn("⚠️  Running in LIMITED MODE (In-Memory Cache Only). Tenders will not be saved to DB.");
-    // Do NOT return; allow fetching
-  }
 
-  // Connect if not connected
-  if (mongoose.connection.readyState === 0) {
-    if (config.MONGO_URI) {
-      try {
-        await mongoose.connect(config.MONGO_URI);
-        console.log("📦 [Ingest] Connected to MongoDB");
-      } catch (err) {
-        console.error("❌ [Ingest] DB Connection Failed:", err.message);
-        return;
-      }
-    } else {
-      // Limited mode, no DB connection
+  // Stats tracking
+  let stats = { processed: 0, new: 0, errors: 0 };
+
+  console.log("🚀 [Ingest] Starting Real Tender Ingestion...");
+
+  // 1. Ingest from UK Contracts Finder (OCDS API)
+  // This provides REAL, live data from the UK government
+  try {
+    const ukUrl = "https://www.contractsfinder.service.gov.uk/Published/Notices/OCDS/Search?limit=30";
+    console.log(`📡 [UK-API] Fetching real tenders from: ${ukUrl}`);
+
+    // Use native fetch (Node 18+) or fallback
+    const response = await (global.fetch || fetch)(ukUrl);
+
+    if (!response.ok) {
+      throw new Error(`UK API returned ${response.status}`);
     }
+
+    const data = await response.json();
+    console.log(`✅ [UK-API] Received ${data.results?.length || 0} notices`);
+
+    if (data.results) {
+      for (const notice of data.results) {
+        try {
+          // OCDS Format Handling
+          // Releases is an array, take the latest
+          const latestRelease = notice.releases?.[0]; // Usually just one in search results
+          if (!latestRelease) continue;
+
+          const tenderInfo = latestRelease.tender || {};
+          const buyer = latestRelease.buyer || {};
+
+          const tenderObj = {
+            title: tenderInfo.title || "Untitled Tender",
+            description_raw: tenderInfo.description || "",
+            authority: buyer.name || "Public Authority",
+            country: "UK", // It's the UK feed
+            deadline: tenderInfo.tenderPeriod?.endDate ? new Date(tenderInfo.tenderPeriod.endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            url: latestRelease.id ? `https://www.contractsfinder.service.gov.uk/Notice/${latestRelease.id}` : "", // Construct URL
+            published_at: latestRelease.date ? new Date(latestRelease.date) : new Date(),
+            budget: tenderInfo.value?.amount ? `£${tenderInfo.value.amount.toLocaleString()}` : "N/A"
+          };
+
+          // Generate score
+          const aiResult = await calculateMatchScore({
+            title: tenderObj.title,
+            description_raw: tenderObj.description_raw,
+            budget: tenderObj.budget
+          }, DEMO_COMPANY);
+
+          // Save to Mock Cache/DB equivalent
+          const finalTender = {
+            ...tenderObj,
+            _id: "uk_" + (latestRelease.id || Math.random().toString(36).substr(2, 9)),
+            match_score: aiResult.score,
+            rationale: aiResult.rationale,
+            source: "UK-Official"
+          };
+
+          // Update generic cache
+          await addToCache(finalTender);
+          stats.new++;
+          stats.processed++;
+
+        } catch (err) {
+          console.error("Error processing UK tender:", err.message);
+          stats.errors++;
+        }
+      }
+    }
+
+  } catch (err) {
+    console.error("❌ [UK-API] Failed:", err.message);
+    stats.errors++;
   }
 
-  let stats = {
-    processed: 0,
-    new: 0,
-    updated: 0,
-    errors: 0
-  };
+  // 2. Mock Data Fallback (for demo variety if UK fails or is filtered)
+  // We keep this to ensure the "Pitch Deck" always has "International" looking data
+  // But we label it clearly if we must.
+  // Actually, let's rely on the mockTenderData service we created earlier as a backup in the ROUTE,
+  // not here in the ingestor. The ingestor should focus on REAL data.
 
-  // 1. Ingest EU (TED)
-  for (const url of config.TED_RSS_URLS) {
-    await fetchAndProcessFeed(url, "TED-EU", stats);
-  }
-
-  // 2. Ingest UK
-  await fetchAndProcessFeed(config.UK_CONTRACTS_FINDER_URL, "UK-ContractsFinder", stats);
-
-  console.log(`\n🎉 Ingestion Finished. Stats:`, stats);
+  console.log(`🎉 Ingestion Finished. Stats:`, stats);
 }
+
+// Helper to save to file cache (mimicking DB for now to be safe/fast)
+async function addToCache(tender) {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+  let currentCache = [];
+  try {
+    if (fs.existsSync(TENDERS_FILE)) {
+      currentCache = JSON.parse(fs.readFileSync(TENDERS_FILE, "utf-8"));
+    }
+  } catch (e) { }
+
+  // Dedup
+  const exists = currentCache.find(t => t.title === tender.title || t.url === tender.url);
+  if (!exists) {
+    currentCache.unshift(tender);
+    // Keep file size manageable
+    if (currentCache.length > 200) currentCache = currentCache.slice(0, 200);
+    fs.writeFileSync(TENDERS_FILE, JSON.stringify(currentCache, null, 2));
+
+    // Update memory cache immediately
+    global.latestTendersCache = currentCache;
+  }
+}
+
+async function fetchAndProcessFeed(url, sourceLabel, stats) {
+  // Legacy/broken RSS function - kept for reference or future fix
+}
+
+async function processSingleItem(item, sourceLabel, stats) {
+  // Legacy item processor
+}
+
+module.exports = { ingestFromTED };
 
 async function fetchAndProcessFeed(url, sourceLabel, stats) {
   if (!url) {
