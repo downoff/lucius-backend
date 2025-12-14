@@ -214,6 +214,7 @@ app.get("/api/debug-routes", (req, res) => {
 app.use("/api/company", require("./routes/company"));
 app.use("/api/tenders", require("./routes/tenders"));
 app.use("/api/viral", require("./routes/viral-growth"));
+app.use("/api/admin", require("./routes/admin")); // Phase 3: Investor Readiness
 app.use("/api/payments", require("./routes/payments"));
 app.use("/api/scoring", require("./routes/scoring"));
 
