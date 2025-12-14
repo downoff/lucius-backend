@@ -136,7 +136,8 @@ async function ingestFromTED() {
             _id: "uk_" + (latestRelease.id || Math.random().toString(36).substr(2, 9)),
             match_score: aiResult.score,
             rationale: aiResult.rationale,
-            source: "UK-Official"
+            source: "UK-Official",
+            source_url: tenderObj.url
           };
 
           await addToCache(finalTender);
