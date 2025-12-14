@@ -15,6 +15,11 @@ const CompanySchema = new mongoose.Schema(
     team_size: { type: String },
     tender_volume: { type: String },
 
+    // Usage Limits (Revenue Automation)
+    proposals_count: { type: Number, default: 0 },
+    proposals_limit: { type: Number, default: 10 }, // 10 Free proposals per month
+    last_reset_at: { type: Date, default: Date.now },
+
     // Payments/plan
     is_paid: { type: Boolean, default: false },
     plan: { type: String, default: null }, // 'starter', etc.

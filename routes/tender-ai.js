@@ -145,6 +145,23 @@ async function ensurePaid(req, res, next) {
     }
 
     req.company = company;
+
+    // --- USAGE LIMIT CHECK (Revenue Automation) ---
+    // If user is NOT on a paid plan (Agency/Enterprise), enforce limit.
+    const isPaidPlan = company.plan === 'agency' || company.plan === 'enterprise' || company.is_paid;
+
+    if (!isPaidPlan) {
+      const limit = company.proposals_limit || 10;
+      if (company.proposals_count >= limit) {
+        return res.status(402).json({
+          message: `You have reached your free limit of ${limit} proposals. Upgrade to Agency for unlimited access.`,
+          code: "PAYWALL_LIMIT_REACHED",
+          is_limit: true
+        });
+      }
+    }
+    // ----------------------------------------------
+
     next();
   } catch (e) {
     console.error("ensurePaid error:", e);
@@ -414,6 +431,14 @@ Ensure the content is substantial (total ~1,200-1,500 words) and directly refere
         company_id: c._id,
       },
     });
+
+    // Increment Usage Count (Async, don't block response)
+    try {
+      await Company.findByIdAndUpdate(c._id, { $inc: { proposals_count: 1 } });
+    } catch (incErr) {
+      console.error("Failed to increment usage count:", incErr);
+    }
+
   } catch (e) {
     console.error("generate draft error:", e);
     res.status(500).json({ message: "AI generation failed." });

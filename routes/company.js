@@ -1,6 +1,7 @@
 // routes/company.js
 const router = require("express").Router();
 const Company = require("../models/Company");
+const { sendEmail } = require("../services/email");
 
 // Create/replace (simple upsert by active flag)
 router.post("/", async (req, res) => {
@@ -9,6 +10,33 @@ router.post("/", async (req, res) => {
     // Keep most recent as "active"
     await Company.updateMany({}, { $set: { active: false } });
     const doc = await Company.create({ ...payload, active: true });
+
+    // --- WELCOME EMAIL (Revenue Automation) ---
+    if (doc.contact_emails && doc.contact_emails.length > 0) {
+      const to = doc.contact_emails[0];
+      const subject = "Welcome to LuciusAI - Your Tender Strategy";
+      const body = `
+Hi there,
+
+Welcome to LuciusAI! You now have access to the most powerful AI tender assistant in the UK.
+
+To help you get started, your Free Solo plan includes:
+- 10 AI-generated proposal drafts per month
+- Unlimited tender search
+- Real-time "Win Probability" scoring
+
+When you're ready to scale, our Agency plan (€49/mo) unlocks unlimited proposals and team collaboration.
+
+Good luck with your bids!
+
+Best,
+The LuciusAI Team
+        `;
+      // Send in background
+      sendEmail(to, subject, body).catch(e => console.error("Welcome email failed", e));
+    }
+    // ------------------------------------------
+
     return res.json(doc);
   } catch (e) {
     console.error(e);
