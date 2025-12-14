@@ -188,28 +188,20 @@ async function ingestFromTED() {
   console.log(`   ❌ Errors: ${stats.errors}`);
 }
 
-// Helper to save to file cache (mimicking DB for now to be safe/fast)
+// Helper to save to MongoDB (Persistent)
 async function addToCache(tender) {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
-  let currentCache = [];
   try {
-    if (fs.existsSync(TENDERS_FILE)) {
-      currentCache = JSON.parse(fs.readFileSync(TENDERS_FILE, "utf-8"));
-    }
-  } catch (e) { }
-
-  // Dedup by URL or title
-  const exists = currentCache.find(t => t.url === tender.url || (t.title === tender.title && t.authority === tender.authority));
-  if (!exists) {
-    // Add new at top
-    currentCache.unshift(tender);
-    // Keep file size manageable (200 max)
-    if (currentCache.length > 200) currentCache = currentCache.slice(0, 200);
-    fs.writeFileSync(TENDERS_FILE, JSON.stringify(currentCache, null, 2));
-
-    // Update memory cache immediately
-    global.latestTendersCache = currentCache;
+    // Upsert: Update if exists, Insert if new
+    // Matching by URL ensures uniqueness
+    await Tender.findOneAndUpdate(
+      { url: tender.url },
+      { $set: tender },
+      { upsert: true, new: true }
+    );
+    // Optional: Update global memory cache if needed for specialized filtering,
+    // but better to rely on DB querying for scale.
+  } catch (err) {
+    console.error("❌ [DB] Failed to save tender:", err.message);
   }
 }
 
