@@ -7,6 +7,21 @@ from bson import ObjectId
 
 router = APIRouter()
 
+@router.get("/", response_model=List[TenderResponse])
+async def read_tenders(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncIOMotorDatabase = Depends(deps.get_db)
+) -> Any:
+    """
+    Retrieve all tenders.
+    """
+    tenders = await db.tenders.find().skip(skip).limit(limit).to_list(100)
+    # Transform _id
+    for t in tenders:
+        t["_id"] = str(t["_id"])
+    return tenders
+
 @router.get("/matching", response_model=List[TenderResponse])
 async def read_matching_tenders(
     region: Optional[str] = Query(None),

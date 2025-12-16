@@ -6,6 +6,7 @@ from app.models.common import MongoBaseModel, PyObjectId
 class UserBase(BaseModel):
     email: EmailStr
     name: Optional[str] = None
+    full_name: Optional[str] = None  # Legacy
     googleId: Optional[str] = None
     stripeCustomerId: Optional[str] = None
     twitterId: Optional[str] = None
@@ -14,10 +15,15 @@ class UserBase(BaseModel):
     credits: int = 10
     brandVoicePrompt: str = "You are an expert social media marketer."
     hasOnboarded: bool = False
+    onboarding_completed: bool = False # Legacy
     emailVerified: bool = False
     niche: str = "General"
     referralCode: Optional[str] = None
     role: str = "owner"
+    
+    # Legacy/Admin fields
+    is_active: bool = True
+    is_superuser: bool = False
     
     # Relations
     company_id: Optional[PyObjectId] = None

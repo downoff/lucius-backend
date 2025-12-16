@@ -14,7 +14,7 @@ LuciusAI automates the analysis, scoring, and proposal writing for government te
 
 We do not rely on a single model. We route tasks to the best-in-class model for the job:
 
-1.  **The Writer (Anthropic Claude 3.5 Sonnet)**: Used for generating Executive Summaries and Methodology sections. Chosen for its superior prose quality and reduced "AI-hallucination" compared to GPT.
+1.  **The Writer (Google Gemini 1.5 Pro)**: Used for generating Executive Summaries and Methodology sections. Chosen for its fluid prose and massive context awareness.
 2.  **The Analyst (Google Gemini 1.5 Pro)**: Used for analyzing massive 100+ page Tender PDF specifications. Chosen for its industry-leading 1M+ token context window.
 3.  **The Scorer (OpenAI GPT-4o)**: Used for rapid extraction of deadlines, budgets, and compliance matrices. Chosen for speed and structured JSON output.
 

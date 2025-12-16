@@ -73,17 +73,23 @@ class LLMFactory:
     def get_provider(task_type: str = "general") -> LLMProvider:
         """
         Routing Logic:
-        - 'writing' -> Anthropic (Best Prose)
-        - 'context' -> Gemini (Huge Window)
+        - 'writing' -> Gemini 1.5 Pro (Replaced Anthropic due to billing)
+        - 'context' -> Gemini 1.5 Pro (Huge Window)
         - 'fast'/'data' -> OpenAI (Structured/Fast)
         """
         
-        # Check available keys to degrade gracefully
-        has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
+        # Check available keys
         has_gemini = bool(os.getenv("GOOGLE_API_KEY"))
+        has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY")) # kept as legacy/backup
         
-        if task_type == "writing" and has_anthropic:
-            return AnthropicProvider()
+        if task_type == "writing":
+            if has_gemini:
+                 return GeminiProvider() # Now the default writer
+            elif has_anthropic:
+                 return AnthropicProvider()
+            else:
+                 return OpenAIProvider()
+                 
         elif task_type == "context" and has_gemini:
             return GeminiProvider()
         else:

@@ -6,7 +6,7 @@ from typing_extensions import Annotated
 PyObjectId = Annotated[str, BeforeValidator(str)]
 
 class MongoBaseModel(BaseModel):
-    id: PyObjectId | None = None
+    id: PyObjectId | None = Field(default=None, alias="_id")
     
     class Config:
         populate_by_name = True
