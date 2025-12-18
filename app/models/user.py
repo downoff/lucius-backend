@@ -37,3 +37,6 @@ class UserInDB(UserBase, MongoBaseModel):
     password: Optional[str] = None # Hashed
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+# Alias for type hinting in endpoints
+User = UserInDB
