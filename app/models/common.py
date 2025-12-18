@@ -1,5 +1,5 @@
 from typing import Any
-from pydantic import BaseModel, BeforeValidator
+from pydantic import BaseModel, BeforeValidator, Field
 from typing_extensions import Annotated
 
 # Helper to automatically convert MongoDB ObjectId to string
