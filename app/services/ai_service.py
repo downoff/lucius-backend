@@ -105,57 +105,7 @@ async def extract_tender_data_from_text(text: str) -> dict:
         print(f"Extraction Error: {e}")
         return {
             "title": "Error Parsing Tender",
-            "description": "Could not extract data from PDF.",
+            "description": f"DEBUG ERROR: {str(e)}",
             "compliance_constraints": []
         }
 
-async def extract_tender_data_from_text(text: str) -> dict:
-    if not settings.GOOGLE_API_KEY:
-         # Mock fallback if key missing (for test/demo without cost)
-         return {
-             "title": "Extracted Tender (Demo)",
-             "description": "Analysis requires GOOGLE_API_KEY.",
-             "compliance_matrix": []
-         }
-
-    # Use Gemini for large context extraction
-    # We import here to avoid circular/init issues if factory pattern used elsewhere, 
-    # but for simple service function it's fine.
-    # Actually, let's use the LLMFactory pattern if possible, or just direct Gemini call for speed/simplicity here.
-    # LLMFactory is in app.core.llm. Let's use that to be consistent.
-    from app.core.llm import LLMFactory
-    
-    provider = LLMFactory.get_provider("context") # Gemini
-    
-    prompt = f"""
-    You are a veteran Bid Manager. Analyze this tender document text and extract critical data.
-    
-    TEXT:
-    {text[:200000]} # Limit to avoid overload if massive, though Gemini handles 1M.
-    
-    TASK:
-    Extract the following in JSON format:
-    1. "title": A concise title.
-    2. "description": A short summary.
-    3. "budget": Estimated value if found, else "Unknown".
-    4. "deadline": Submission deadline (YYYY-MM-DD) if found.
-    5. "region": Location/Region.
-    6. "compliance_constraints": A list of objects {{ "clause": "string", "severity": "HIGH/MEDIUM", "page_ref": "number/string" }}.
-       - Focus on certifications (ISO), financial guarantees, hard deadlines, and pass/fail criteria.
-       
-    Return ONLY valid JSON.
-    """
-    
-    try:
-        response = await provider.generate(prompt, json_mode=True)
-        # Gemini sometimes wraps in ```json ... ```
-        clean_json = response.replace("```json", "").replace("```", "").strip()
-        data = json.loads(clean_json)
-        return data
-    except Exception as e:
-        print(f"Extraction Error: {e}")
-        return {
-            "title": "Error Parsing Tender",
-            "description": "Could not extract data from PDF.",
-            "compliance_constraints": []
-        }
