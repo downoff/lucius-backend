@@ -67,42 +67,50 @@ Return JSON:
         }
 
 async def extract_tender_data_from_text(text: str) -> dict:
-    if not settings.GOOGLE_API_KEY:
+    """Extract tender data using OpenAI (Gemini has API compatibility issues)"""
+    if not settings.OPENAI_API_KEY:
          return {
              "title": "Extracted Tender (Demo)",
-             "description": "Analysis requires GOOGLE_API_KEY.",
-             "compliance_matrix": []
+             "description": "Analysis requires OPENAI_API_KEY.",
+             "compliance_constraints": []
          }
 
-    from app.core.llm import LLMFactory
-    provider = LLMFactory.get_provider("context")
-    
     prompt = f"""
-    You are a veteran Bid Manager. Analyze this tender document text and extract critical data.
-    
-    TEXT:
-    {text[:200000]}
-    
-    TASK:
-    Extract the following in JSON format:
-    1. "title": A concise title.
-    2. "description": A short summary.
-    3. "budget": Estimated value if found, else "Unknown".
-    4. "deadline": Submission deadline (YYYY-MM-DD) if found.
-    5. "region": Location/Region.
-    6. "compliance_constraints": A list of objects {{ "clause": "string", "severity": "HIGH/MEDIUM", "page_ref": "number/string" }}.
-       - Focus on certifications (ISO), financial guarantees, hard deadlines, and pass/fail criteria.
-       
-    Return ONLY valid JSON.
-    """
+You are a veteran Bid Manager. Analyze this tender document text and extract critical data.
+
+TEXT:
+{text[:100000]}
+
+TASK:
+Extract the following in JSON format:
+1. "title": A concise title.
+2. "description": A short summary.
+3. "budget": Estimated value if found, else "Unknown".
+4. "deadline": Submission deadline (YYYY-MM-DD) if found.
+5. "region": Location/Region.
+6. "compliance_constraints": A list of objects with "clause", "severity" (HIGH/MEDIUM), "page_ref".
+   - Focus on certifications (ISO), financial guarantees, hard deadlines, and pass/fail criteria.
+
+Return ONLY valid JSON.
+"""
     
     try:
-        response = await provider.generate(prompt, json_mode=True)
-        clean_json = response.replace("```json", "").replace("```", "").strip()
-        data = json.loads(clean_json)
+        completion = await client.chat.completions.create(
+            model="gpt-4o",  # Using full GPT-4o for better extraction
+            temperature=0.1,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": "You are a precise tender data extraction engine."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        content = completion.choices[0].message.content
+        data = json.loads(content)
         return data
     except Exception as e:
         print(f"Extraction Error: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "title": "Error Parsing Tender",
             "description": f"DEBUG ERROR: {str(e)}",
