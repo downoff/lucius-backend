@@ -20,6 +20,13 @@ class TenderBase(BaseModel):
     source_id: Optional[str] = None
     ai_summary: Optional[str] = None
 
+
+class TenderCreate(TenderBase):
+    pass
+
+class TenderUpdate(TenderBase):
+    pass
+
 class TenderInDB(TenderBase, MongoBaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
