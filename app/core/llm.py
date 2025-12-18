@@ -54,7 +54,7 @@ class AnthropicProvider(LLMProvider):
 class GeminiProvider(LLMProvider):
     def __init__(self):
         genai.configure(api_key=os.getenv("GOOGLE_API_KEY", ""))
-        self.model = genai.GenerativeModel('gemini-1.5-pro')
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
 
     async def generate(self, prompt: str, system_prompt: Optional[str] = None, json_mode: bool = False) -> str:
         if not os.getenv("GOOGLE_API_KEY"):
