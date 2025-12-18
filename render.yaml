@@ -19,3 +19,7 @@ services:
         value: 10080
       - key: STRIPE_SECRET_KEY
         sync: false
+    disk:
+      name: chroma-data
+      mountPath: /opt/render/project/src/chroma_db
+      sizeGB: 1
