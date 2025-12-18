@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: lucius-backend-python
+    name: lucius-ai
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
