@@ -40,6 +40,38 @@ app.include_router(scoring.router, prefix="/api/scoring", tags=["scoring"])
 @app.on_event("startup")
 async def startup_db_client():
     db.connect()
+    
+    # ensure demo user exists
+    from app.core.security import get_password_hash
+    from app.models.user import UserInDB
+    
+    try:
+        email = "demo@ycombinator.com"
+        pwd = "trylucius2026"
+        hashed = get_password_hash(pwd)
+        
+        existing = await db.db.users.find_one({"email": email})
+        if existing:
+            await db.db.users.update_one(
+                {"email": email},
+                {"$set": {"password": hashed, "isPro": True, "credits": 100, "name": "YC Demo"}}
+            )
+            print(f"Verified/Reset Demo User: {email}")
+        else:
+            user_in = UserInDB(
+                email=email,
+                password=hashed, # will be double hashed if passed to constructor? No, UserInDB is just a model.
+                name="YC Demo",
+                isPro=True,
+                credits=100
+            ) 
+            user_dict = user_in.model_dump()
+            user_dict["password"] = hashed # ensure hash
+            await db.db.users.insert_one(user_dict)
+            print(f"Created Demo User: {email}")
+            
+    except Exception as e:
+        print(f"Error checking demo user: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
