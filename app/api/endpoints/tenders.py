@@ -2,10 +2,68 @@ from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from app.api import deps
 from app.models.schemas import TenderResponse
+from app.models.tender import TenderCreate, TenderInDB
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
+from app.models.user import User
+from fastapi import UploadFile, File
+import io
+from pypdf import PdfReader
+from datetime import datetime, timezone
 
 router = APIRouter()
+
+router = APIRouter()
+
+@router.post("/upload", response_model=TenderResponse)
+async def upload_tender(
+    file: UploadFile = File(...),
+    db: AsyncIOMotorDatabase = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user)
+) -> Any:
+    """
+    Upload a PDF tender, extract requirements via Gemini, and save to DB.
+    """
+    try:
+        contents = await file.read()
+        
+        # Extract Text
+        pdf_file = io.BytesIO(contents)
+        reader = PdfReader(pdf_file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+            
+        # AI Extraction
+        from app.services.ai_service import extract_tender_data_from_text
+        extracted_data = await extract_tender_data_from_text(text)
+        
+        # Create Tender Object
+        tender_in = TenderInDB(
+            title=extracted_data.get("title", file.filename),
+            description_raw=extracted_data.get("description", "Uploaded PDF"),
+            region=extracted_data.get("region", "Global"),
+            budget=extracted_data.get("budget", "Unknown"),
+            deadline_iso=extracted_data.get("deadline", "Unknown"),
+            compliance_matrix=extracted_data.get("compliance_constraints", []),
+            created_at=datetime.now(timezone.utc),
+            source="upload",
+            source_id="upload_" + file.filename,
+            ai_summary=extracted_data.get("description"),
+            match_score=95,
+            country=extracted_data.get("region", "Global")
+        )
+        
+        tender_dict = tender_in.model_dump()
+        result = await db.tenders.insert_one(tender_dict)
+        new_tender = await db.tenders.find_one({"_id": result.inserted_id})
+        new_tender["_id"] = str(new_tender["_id"])
+        
+        return new_tender
+
+    except Exception as e:
+        print(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/", response_model=List[TenderResponse])
 async def read_tenders(
