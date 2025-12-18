@@ -1,9 +1,10 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 from app.models.common import MongoBaseModel, PyObjectId
 
 class UserBase(BaseModel):
+    model_config = ConfigDict(extra='ignore')
     email: EmailStr
     name: Optional[str] = None
     full_name: Optional[str] = None  # Legacy
