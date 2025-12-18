@@ -41,11 +41,11 @@ app.include_router(scoring.router, prefix="/api/scoring", tags=["scoring"])
 async def startup_db_client():
     db.connect()
     
-    # ensure demo user exists
-    from app.core.security import get_password_hash
-    from app.models.user import UserInDB
-    
     try:
+        # ensure demo user exists
+        from app.core.security import get_password_hash
+        from app.models.user import UserInDB
+        
         email = "demo@ycombinator.com"
         pwd = "trylucius2026"
         hashed = get_password_hash(pwd)
@@ -60,7 +60,7 @@ async def startup_db_client():
         else:
             user_in = UserInDB(
                 email=email,
-                password=hashed, # will be double hashed if passed to constructor? No, UserInDB is just a model.
+                password=hashed,
                 name="YC Demo",
                 isPro=True,
                 credits=100
@@ -70,8 +70,10 @@ async def startup_db_client():
             await db.db.users.insert_one(user_dict)
             print(f"Created Demo User: {email}")
             
-    except Exception as e:
-        print(f"Error checking demo user: {e}")
+    except BaseException as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error checking demo user (Non-critical): {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
