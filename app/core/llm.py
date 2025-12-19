@@ -83,12 +83,15 @@ class LLMFactory:
         has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY")) # kept as legacy/backup
         
         if task_type == "writing":
-            if has_gemini:
-                 return GeminiProvider() # Now the default writer
-            elif has_anthropic:
-                 return AnthropicProvider()
-            else:
-                 return OpenAIProvider()
+             # DEMO FIX: Prioritize OpenAI as user explicitly paid for it and Gemini is flaky
+             return OpenAIProvider()
+             
+             # if has_gemini:
+             #      return GeminiProvider() # Now the default writer
+             # elif has_anthropic:
+             #      return AnthropicProvider()
+             # else:
+             #      return OpenAIProvider()
                  
         elif task_type == "context" and has_gemini:
             return GeminiProvider()

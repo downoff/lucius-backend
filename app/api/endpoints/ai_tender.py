@@ -126,7 +126,9 @@ Tone: Professional, confident, persuasive. Length: ~1000 words.
         draft_content = await llm.generate(prompt)
         return {"draft": draft_content, "meta": {"source": llm.__class__.__name__}}
     except Exception as e:
-        print(f"AI Error: {e}")
+        import traceback
+        traceback.print_exc()
+        print(f"AI Proposal Error: {e}")
         return {"draft": _build_fallback(final_text), "meta": {"source": "fallback-error"}}
 
 def _build_fallback(text):
