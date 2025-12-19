@@ -105,22 +105,36 @@ async def generate_draft(
     llm = LLMFactory.get_provider("writing")
     
     prompt = f"""
-You are Lucius Tender AI. Create a professional proposal draft based on:
-TENDER: "{final_text[:3000]}..."
-COMPANY: "{company_data.get('company_name', 'Generic') if company_data else 'Generic'}"
+You are a Senior Bid Manager for {company_data.get('company_name', 'our company')}. create a strategic, winning proposal draft.
+
+CONTEXT:
+Tender: "{final_text[:5000]}..."
+Our Profile: "{company_data.get('description', 'Generic Service Provider')}"
 
 {rag_prompt}
 
-Structure:
-1. Executive Summary
-2. Understanding
-3. Approach
-4. Team
-5. Plan
-6. Compliance
-7. Closing
+TASK:
+Write a ~1200 word proposal that persuades the evaluator we are the ONLY viable choice.
 
-Tone: Professional, confident, persuasive. Length: ~1000 words.
+STRUCTURE & REQUIREMENTS:
+1.  **Executive Summary (The Hook):**
+    - State our unique value proposition immediately.
+    - Reference specific pain points from the tender requirements.
+2.  **Understanding & Approach (The "How"):**
+    - Don't just regurgitate the requirements. Explain *how* we solve them better.
+    - Use "Win Themes" (e.g., Speed, Safety, innovation).
+3.  **Risk Mitigation (The "Trust"):**
+    - Proactively identify 2-3 potential risks in this project and how we mitigate them.
+4.  **Team & Experience:**
+    - Highlight relevant experience.
+5.  **Pricing & Value:**
+    - Focus on ROI, not just cost.
+6.  **References:**
+    - Mention we have served similar clients (generic placeholder if unknown).
+
+TONE:
+- Specific, Authoritative, Partner-focused.
+- Avoid fluff. Use active voice.
 """
     try:
         draft_content = await llm.generate(prompt)
