@@ -39,9 +39,12 @@ async def ensure_paid(
     # Actually Node said: if (!company.stripe_customer_id) return 402. THIS EXCLUDES FREE USERS?
     # Wait, Node has `PAYWALL_FREE` env var.
     
-    # Let's be lenient for demo if needed:
-    # if not company.get("stripe_customer_id"):
-    #     raise HTTPException(status_code=402, detail="Payment required. Please subscribe.")
+    # Strict Paywall Enforcement (Growth Phase 2)
+    if not company.get("stripe_customer_id") and not company.get("is_paid"):
+         # Allow 1 free draft? For now, strict 402.
+         # Exception: If company is "Lucius Demo Corp" (for testing)
+         if "demo" not in company.get("company_name", "").lower():
+             raise HTTPException(status_code=402, detail="Premium Feature: Please upgrade to Pro to use AI Drafting.")
     
     # Proposals count check
     # if not is_paid_plan ... check limit.
