@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 
 class TenderResponse(BaseModel):
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra='ignore', populate_by_name=True)
     
     id: str = Field(alias="_id")
     title: str
@@ -27,6 +27,3 @@ class TenderResponse(BaseModel):
     ai_summary: Optional[str] = None
     compliance_matrix: Optional[List[dict]] = None
     compliance_constraints: Optional[List[dict]] = None # Alias/Alternate
-
-    class Config:
-        populate_by_name = True
