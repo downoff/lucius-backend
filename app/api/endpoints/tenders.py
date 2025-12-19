@@ -133,16 +133,29 @@ async def read_tender(
     """
     Get tender by ID.
     """
-    tender = None
-    if ObjectId.is_valid(id):
-        tender = await db.tenders.find_one({"_id": ObjectId(id)})
-    
-    if not tender:
-        # Try legacy string ID or field 'id'
-        tender = await db.tenders.find_one({"id": id})
-
-    if not tender:
-        raise HTTPException(status_code=404, detail="Tender not found")
+    try:
+        tender = None
+        if ObjectId.is_valid(id):
+            tender = await db.tenders.find_one({"_id": ObjectId(id)})
         
-    tender["_id"] = str(tender["_id"])
-    return tender
+        if not tender:
+            # Try legacy string ID or field 'id'
+            tender = await db.tenders.find_one({"id": id})
+
+        if not tender:
+            raise HTTPException(status_code=404, detail="Tender not found")
+            
+        tender["_id"] = str(tender["_id"])
+        
+        # Ensure compliance fields exist if missing
+        if "compliance_matrix" not in tender:
+            tender["compliance_matrix"] = []
+            
+        return tender
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error reading tender {id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
