@@ -214,9 +214,19 @@ app.get("/api/debug-routes", (req, res) => {
 app.use("/api/company", require("./routes/company"));
 app.use("/api/tenders", require("./routes/tenders"));
 app.use("/api/viral", require("./routes/viral-growth"));
+app.use("/api/public", require("./routes/public")); // New PSEO Module
 app.use("/api/admin", require("./routes/admin")); // Phase 3: Investor Readiness
 app.use("/api/payments", require("./routes/payments"));
 app.use("/api/scoring", require("./routes/scoring"));
+app.use("/api/upload", require("./routes/upload")); // New Async Upload Module
+
+// Start Queue Worker (Async Stability Engine)
+try {
+  const { startWorker } = require("./services/queueWorker");
+  startWorker(5000); // Poll every 5 seconds
+} catch (e) {
+  console.error("Failed to start Queue Worker:", e.message);
+}
 
 // Admin Trigger for Ingestion (Temporary/Dev)
 app.post("/api/admin/ingest", async (req, res) => {

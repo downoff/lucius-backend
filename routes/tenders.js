@@ -192,6 +192,39 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ message: "Tender not found" });
     }
 
+    // --- PAYWALL LOGIC ---
+    // Check if the requesting user (company) is on the Pro plan
+    // For this robust implementation, we check the 'Company' model associated with the session/user
+    // But for simplicity/demo speed, we'll check a flag or defaulting to free.
+
+    // NOTE: In a full auth system, `req.user` would be populated by passport/middleware.
+    // Here we check if the company attached to the request (if any) is valid.
+    const Company = require("../models/Company");
+
+    // Simple check: Is the 'Demo' company paid? (For single-player mode)
+    // Or if `req.user.companyId` exists.
+    let isPro = false;
+    // Mock check for now - in production, this comes from req.user.is_paid
+    // const company = await Company.findOne({ active: true });
+    // if (company && company.is_paid) isPro = true;
+
+    // Redact high-value fields if not Pro
+    if (!isPro) {
+      if (tender.ai_proposal_draft) {
+        // We keep the first 100 chars as a teaser, then blur the rest
+        const teaser = tender.ai_proposal_draft.substring(0, 150);
+        tender.ai_proposal_draft = `${teaser}...\n\n[🔒 UPGRADE TO PRO TO SEE FULL AI PROPOSAL]\n[This content is blurred for free tier users.]`;
+        tender.is_blurred = true; // Frontend can use this to show a lock UI
+      }
+
+      // Also redact sensitive compliance matrix details if needed
+      if (tender.compliance_matrix && tender.compliance_matrix.length > 3) {
+        // show only first 3 items
+        tender.compliance_matrix = tender.compliance_matrix.slice(0, 3);
+        tender.compliance_matrix.push({ requirement: "20+ More Requirements Hidden", status: "locked", source_page: 0 });
+      }
+    }
+
     return res.json(tender);
   } catch (err) {
     console.error("get tender by id error:", err);

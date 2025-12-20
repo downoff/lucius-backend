@@ -55,14 +55,23 @@ router.post("/create-checkout-session", async (req, res) => {
     }
 
     const base = frontendBase();
-    const session = await stripe.checkout.sessions.create({
+
+    // Determine mode based on price type (simplified logic: assume recurring unless specified)
+    // For this 'Production' build, we default to subscription for SaaS revenue.
+    const checkoutOptions = {
       mode: "subscription",
       customer: customerId,
       line_items: [{ price, quantity: 1 }],
-      success_url: `${base}/success`,
-      cancel_url: `${base}/cancel`,
-      metadata: { company_id: String(company._id) },
-    });
+      success_url: `${base}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${base}/pricing`, // Redirect back to pricing on cancel
+      metadata: {
+        company_id: String(company._id),
+        tier: "pro_plan"
+      },
+      allow_promotion_codes: true
+    };
+
+    const session = await stripe.checkout.sessions.create(checkoutOptions);
 
     return res.json({ url: session.url });
   } catch (e) {
