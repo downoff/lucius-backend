@@ -18,7 +18,8 @@ app.add_middleware(
 )
 
 # Router imports
-from app.api.endpoints import auth, users, tenders, company, ai_tender, payments, viral, scoring
+# Router imports
+from app.api.endpoints import auth, users, tenders, company, ai_tender, payments, viral, scoring, dashboard
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
@@ -28,6 +29,7 @@ app.include_router(ai_tender.router, prefix="/api/ai-tender", tags=["ai-tender"]
 app.include_router(payments.router, prefix="/api/payments", tags=["payments"])
 app.include_router(viral.router, prefix="/api/viral", tags=["viral"])
 app.include_router(scoring.router, prefix="/api/scoring", tags=["scoring"])
+app.include_router(dashboard.router, prefix="/api/admin", tags=["admin"])
 
 @app.on_event("startup")
 async def startup_db_client():
