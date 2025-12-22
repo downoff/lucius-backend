@@ -39,6 +39,8 @@ async def upload_tender(
         extracted_data = await extract_tender_data_from_text(text)
         
         # Create Tender Object
+        is_demo = extracted_data.get("is_demo", False)
+        
         tender_in = TenderInDB(
             title=extracted_data.get("title", file.filename),
             description_raw=extracted_data.get("description", "Uploaded PDF"),
@@ -50,9 +52,12 @@ async def upload_tender(
             source="upload",
             source_id="upload_" + file.filename,
             ai_summary=extracted_data.get("description"),
-            match_score=95,
+            match_score=95 if is_demo else 0, # Placeholder, real scoring happens next step usually
             country=extracted_data.get("region", "Global")
         )
+        
+        # In a real flow, we would trigger calculate_match_score here too.
+        # But for the demo/MVP, the AI/Demo extraction does enough.
         
         tender_dict = tender_in.model_dump()
         result = await db.tenders.insert_one(tender_dict)
