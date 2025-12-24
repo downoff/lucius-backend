@@ -107,7 +107,51 @@ app.post(
 
 app.set("trust proxy", 1);
 
-// Configure Helmet to not interfere with CORS
+// --- CORS: MUST be configured BEFORE Helmet ---
+const ALLOWED_ORIGINS = [
+  "https://www.ailucius.com",
+  "https://ailucius.com",
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:3000",
+  "https://lucius-frontend.onrender.com",
+  "https://lucius-ai.onrender.com",
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Allow localhost in any environment
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      return callback(null, true);
+    }
+    
+    // In development, allow all
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    
+    // Check allowed origins
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: Origin ${origin} not allowed`));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'x-auth-token'],
+  exposedHeaders: ['x-request-id']
+};
+
+// CORS must be BEFORE other middleware
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// Configure Helmet AFTER CORS
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   crossOriginEmbedderPolicy: false,
@@ -115,76 +159,6 @@ app.use(helmet({
 }));
 
 app.use(compression());
-
-// --- CORS: Strict Production Configuration ---
-const ALLOWED_ORIGINS = [
-  "https://www.ailucius.com",
-  "https://ailucius.com",
-  "http://localhost:5173",
-  "http://localhost:5174", // Common alternate dev port
-  "http://localhost:3000", // Additional dev port
-  "https://lucius-frontend.onrender.com", // Render preview if needed
-  "https://lucius-ai.onrender.com", // Render backend URL (for same-origin requests)
-  process.env.FRONTEND_URL // Allow dynamic frontend URL from env
-].filter(Boolean); // Remove any undefined values
-
-// CORS configuration function (reusable)
-const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) {
-      console.log('[CORS] Allowing request with no origin');
-      return callback(null, true);
-    }
-
-    // In development (non-production or localhost), allow all
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[CORS] Development mode - allowing origin: ${origin}`);
-      return callback(null, true);
-    }
-
-    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-      console.log(`[CORS] Allowing localhost origin: ${origin}`);
-      return callback(null, true);
-    }
-
-    // Check against allowed origins
-    if (ALLOWED_ORIGINS.includes(origin)) {
-      console.log(`[CORS] Allowing origin: ${origin}`);
-      callback(null, true);
-    } else {
-      console.warn(`[CORS] BLOCKED request from origin: ${origin}`);
-      console.warn(`[CORS] Allowed origins:`, ALLOWED_ORIGINS);
-      callback(new Error(`Not allowed by CORS: ${origin}`));
-    }
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-request-id", "x-auth-token"],
-  exposedHeaders: ["x-request-id"]
-};
-
-// Apply CORS middleware
-app.use(cors(corsOptions));
-
-// Explicit preflight handling for all routes (must be before other routes)
-app.options("*", cors(corsOptions));
-
-// Additional CORS header middleware - ensures headers on ALL responses including errors
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Always add CORS headers if origin is in allowed list
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-request-id, x-auth-token');
-    res.setHeader('Access-Control-Expose-Headers', 'x-request-id');
-  }
-  
-  next();
-});
 
 // --- Body Parsing with Increased Limits for PDF Uploads ---
 // Increased to 50mb to handle large PDF files
