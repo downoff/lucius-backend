@@ -222,8 +222,9 @@ app.use("/api/upload", require("./routes/upload")); // New Async Upload Module
 
 // Start Queue Worker (Async Stability Engine)
 try {
-  const { startWorker } = require("./services/queueWorker");
-  startWorker(5000); // Poll every 5 seconds
+  // Initialize BullMQ Worker
+  require("./workers/pdfProcessor");
+  console.log("✅ [Startup] PDF Processor Worker started (BullMQ)");
 } catch (e) {
   console.error("Failed to start Queue Worker:", e.message);
 }

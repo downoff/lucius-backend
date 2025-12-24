@@ -1,0 +1,38 @@
+[
+  {
+    "slug": "construction-tenders-uk-mock",
+    "industry": "Construction (Mock)",
+    "location": "UK",
+    "keywords": [
+      "NEC3",
+      "JCT Contracts",
+      "BIM Level 2"
+    ],
+    "pain_points": "navigating complex compliance matrices",
+    "content_hook": "Automate your construction bids today."
+  },
+  {
+    "slug": "software-tenders-usa-mock",
+    "industry": "Software",
+    "location": "USA",
+    "keywords": [
+      "FedRAMP",
+      "NIST",
+      "Agile"
+    ],
+    "pain_points": "meeting federal security standards",
+    "content_hook": "Win more federal software contracts."
+  },
+  {
+    "slug": "medical-devices-germany",
+    "industry": "Medical Devices",
+    "location": "Germany",
+    "keywords": [
+      "MDR",
+      "ISO 13485",
+      "Clinical Eval"
+    ],
+    "pain_points": "EU MDR compliance documentation",
+    "content_hook": "Accelerate your medical device approvals."
+  }
+]

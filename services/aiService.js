@@ -22,8 +22,10 @@ async function analyzeTenderText(text, context = {}) {
   }
 
   // 2. Prepare Prompt
-  // Truncate text to avoid token limits (approx 12k chars ~ 3k tokens, safe for 4o-mini)
-  const safeText = text.substring(0, 15000);
+  // GPT-4o has 128k token context. 100,000 characters is roughly 25k tokens, well within limits.
+  // For 500-page PDFs (~200k+ tokens), a Map-Reduce approach would be needed.
+  // For this release, we maximize the first pass context to cover 95% of tenders.
+  const safeText = text.substring(0, 100000); // Increased from 15k
 
   const systemPrompt = `You are an expert Bid Manager. 
   Extract a strict JSON object from the Tender Document provided.
@@ -72,4 +74,48 @@ function mockAnalysis(text) {
   };
 }
 
-module.exports = { analyzeTenderText };
+/**
+ * Granular generation with specific prompts for different sections.
+ * @param {string} text - The raw text.
+ * @param {string} type - 'compliance' | 'risk' | 'proposal'
+ * @returns {Promise<object>}
+ */
+async function generateWithFallback(text, type) {
+  // Demo Mode override
+  if (!openai || process.env.AI_DEMO_MODE === "true") {
+    const mock = mockAnalysis(text);
+    if (type === 'compliance') return { requirements: mock.compliance_matrix };
+    if (type === 'risk') return { score: mock.risk_score };
+    if (type === 'proposal') return { text: mock.generated_proposal_draft };
+  }
+
+  const safeText = text.substring(0, 100000);
+  let systemPrompt = "";
+
+  if (type === 'compliance') {
+    systemPrompt = `Extract a compliance matrix. Output JSON: { "requirements": [{ "requirement": "string", "source_page": number, "status": "compliant"|"risk" }] }`;
+  } else if (type === 'risk') {
+    systemPrompt = `Analyze risk. Output JSON: { "score": number (0-100), "rationale": "string" }`;
+  } else if (type === 'proposal') {
+    systemPrompt = `Draft a proposal. Output JSON: { "text": "markdown string" }`;
+  }
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Context:\n${safeText}` }
+      ],
+      temperature: 0.2,
+    });
+    return JSON.parse(completion.choices[0].message.content);
+
+  } catch (error) {
+    console.error(`[AIService] ${type} generation failed:`, error.message);
+    throw error;
+  }
+}
+
+module.exports = { analyzeTenderText, generateWithFallback };
