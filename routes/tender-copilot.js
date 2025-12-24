@@ -1,7 +1,20 @@
 // routes/tender-copilot.js
 const express = require("express");
 const multer = require("multer");
-const pdfParse = require("pdf-parse");
+const pdfParseModule = require("pdf-parse");
+const PDFParse = pdfParseModule.PDFParse;
+
+// Wrapper function to match the old API: pdfParse(buffer) -> Promise<{text, ...}>
+const pdfParse = async (buffer, options = {}) => {
+  const parser = new PDFParse({ data: buffer, ...options });
+  const result = await parser.getText();
+  return {
+    text: result.text || '',
+    numPages: result.total || 0,
+    pages: result.pages || []
+  };
+};
+
 const OpenAI = require("openai");
 
 const router = express.Router();

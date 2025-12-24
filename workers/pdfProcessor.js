@@ -1,7 +1,20 @@
 const { Worker } = require('bullmq');
 const mongoose = require('mongoose');
 const fs = require('fs');
-const pdf = require('pdf-parse');
+const pdfModule = require('pdf-parse');
+const PDFParse = pdfModule.PDFParse;
+
+// Wrapper function to match the old API: pdf(buffer) -> Promise<{text, ...}>
+const pdf = async (buffer, options = {}) => {
+  const parser = new PDFParse({ data: buffer, ...options });
+  const result = await parser.getText();
+  return {
+    text: result.text || '',
+    numPages: result.total || 0,
+    pages: result.pages || []
+  };
+};
+
 const Job = require('../models/Job');
 const aiService = require('../services/aiService');
 

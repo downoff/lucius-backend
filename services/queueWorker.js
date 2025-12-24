@@ -1,8 +1,22 @@
 const Job = require('../models/Job');
 const { analyzeTenderText } = require('./aiService');
 const fs = require('fs');
-const pdfParse = require('pdf-parse');
 const mongoose = require('mongoose');
+
+// Import pdf-parse - version 2.4+ uses a class, create a wrapper function
+const pdfParseModule = require('pdf-parse');
+const PDFParse = pdfParseModule.PDFParse;
+
+// Wrapper function to match the old API: pdfParse(buffer) -> Promise<{text, ...}>
+const pdfParse = async (buffer, options = {}) => {
+  const parser = new PDFParse({ data: buffer, ...options });
+  const result = await parser.getText();
+  return {
+    text: result.text || '',
+    numPages: result.total || 0,
+    pages: result.pages || []
+  };
+};
 
 // Queue Worker Logic
 // In a real production environment with multiple instances, use Redis (Bull).
