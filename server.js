@@ -244,6 +244,11 @@ app.post("/api/admin/ingest", async (req, res) => {
 });
 
 
+// 404 Handler for API Routes - Force JSON response
+app.use("/api/*", (req, res) => {
+  res.status(404).json({ error: "API Endpoint Not Found" });
+});
+
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server listening on port ${PORT} (0.0.0.0)`);
   console.log(`[Startup] Strict CORS enabled. MONGO_URI present: ${!!mongoUri}`);
