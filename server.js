@@ -194,13 +194,34 @@ if (!mongoUri) {
   console.warn("⚠️  MONGO_URI not set. Skipping DB connection. App will run in limited mode.");
 } else {
   mongoose
-    .connect(mongoUri, { autoIndex: true })
+    .connect(mongoUri, { 
+      autoIndex: true,
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+      socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
+    })
     .then(() => {
-      console.log("MongoDB Connected");
+      console.log("✅ MongoDB Connected");
       // Start queue worker after MongoDB is connected
       startQueueWorker();
     })
-    .catch((err) => console.error("MongoDB Connection Error:", err));
+    .catch((err) => {
+      console.error("❌ MongoDB Connection Error:", err.message);
+      // Don't crash the server - it can still serve static files and some API routes
+      console.warn("⚠️  Server will continue without database. Some features will be unavailable.");
+    });
+  
+  // Handle MongoDB connection events
+  mongoose.connection.on('error', (err) => {
+    console.error('❌ MongoDB connection error:', err.message);
+  });
+  
+  mongoose.connection.on('disconnected', () => {
+    console.warn('⚠️  MongoDB disconnected. Queue worker will pause until reconnection.');
+  });
+  
+  mongoose.connection.on('reconnected', () => {
+    console.log('✅ MongoDB reconnected');
+  });
 }
 
 // ============================================================================

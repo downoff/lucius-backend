@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const mongoose = require('mongoose');
 const Job = require('../models/Job');
 
 // Safely import analyzeTenderPDF - may not be available if Python backend isn't configured
@@ -15,15 +16,30 @@ try {
 }
 
 // Configure Multer for PDF Uploads
+const fs = require('fs');
+const uploadDir = path.join(__dirname, '../data/uploads');
+
+// Ensure upload directory exists
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+    console.log(`[Upload] Created upload directory: ${uploadDir}`);
+  }
+} catch (error) {
+  console.error(`[Upload] Failed to create upload directory: ${error.message}`);
+}
+
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../data/uploads');
-    // Ensure dir exists
-    const fs = require('fs');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    // Ensure dir exists on each upload (in case it was deleted)
+    try {
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      cb(null, uploadDir);
+    } catch (error) {
+      cb(new Error(`Failed to access upload directory: ${error.message}`));
     }
-    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -61,6 +77,14 @@ router.post('/', upload.single('file'), async (req, res) => {
       } catch (parseError) {
         return res.status(400).json({ error: 'Invalid JSON in companyContext field' });
       }
+    }
+
+    // Check MongoDB connection before creating job
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ 
+        error: 'Database unavailable',
+        message: 'Please try again in a moment'
+      });
     }
 
     // Create Job with initial progress
@@ -125,6 +149,14 @@ router.post('/', upload.single('file'), async (req, res) => {
  */
 router.get('/jobs/:id', async (req, res) => {
   try {
+    // Check MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ 
+        error: 'Database unavailable',
+        message: 'Please try again in a moment'
+      });
+    }
+
     const job = await Job.findById(req.params.id);
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
@@ -133,13 +165,18 @@ router.get('/jobs/:id', async (req, res) => {
     res.json({
       id: job._id,
       status: job.status,
-      progress: job.progress,
+      progress: job.progress || 0, // Ensure progress is always a number
       result: job.result,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt
     });
 
   } catch (error) {
+    console.error('[Upload] Error fetching job:', error.message);
+    // Check if it's a MongoDB error
+    if (error.name === 'CastError' || error.message?.includes('Cast to ObjectId')) {
+      return res.status(400).json({ error: 'Invalid job ID format' });
+    }
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });

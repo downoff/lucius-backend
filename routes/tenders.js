@@ -299,6 +299,7 @@ router.get("/demo-seed", async (_req, res) => {
  * This route exists for frontend compatibility
  */
 const multer = require('multer');
+const mongoose = require('mongoose');
 const Job = require('../models/Job');
 
 // Safely import analyzeTenderPDF - may not be available if Python backend isn't configured
@@ -352,6 +353,14 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       } catch (parseError) {
         return res.status(400).json({ error: 'Invalid JSON in companyContext field' });
       }
+    }
+
+    // Check MongoDB connection before creating job
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ 
+        error: 'Database unavailable',
+        message: 'Please try again in a moment'
+      });
     }
 
     // Create Job with initial progress

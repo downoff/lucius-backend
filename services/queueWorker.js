@@ -2,6 +2,7 @@ const Job = require('../models/Job');
 const { analyzeTenderText } = require('./aiService');
 const fs = require('fs');
 const pdfParse = require('pdf-parse');
+const mongoose = require('mongoose');
 
 // Queue Worker Logic
 // In a real production environment with multiple instances, use Redis (Bull).
@@ -11,6 +12,13 @@ let isProcessing = false;
 
 async function processQueue() {
   if (isProcessing) return; // Prevent overlapping runs
+  
+  // Check if MongoDB is connected before processing
+  if (mongoose.connection.readyState !== 1) {
+    // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+    return; // Skip this cycle, wait for connection
+  }
+  
   isProcessing = true;
 
   try {
@@ -43,7 +51,12 @@ async function processQueue() {
     // Add other job types here...
 
   } catch (err) {
-    console.error("[Queue] Worker Error:", err);
+    // Check if it's a MongoDB connection error
+    if (err.name === 'MongoServerError' || err.name === 'MongooseError' || err.message?.includes('Mongo')) {
+      console.error("[Queue] MongoDB connection error, will retry on next cycle:", err.message);
+    } else {
+      console.error("[Queue] Worker Error:", err.message || err);
+    }
   } finally {
     isProcessing = false;
   }
@@ -55,7 +68,7 @@ async function handlePdfAnalysis(job) {
     await updateProgress(job._id, 15, "Reading PDF...");
 
     if (!fs.existsSync(job.payload.filePath)) {
-      throw new Error("File not found on server");
+      throw new Error(`File not found on server: ${job.payload.filePath}`);
     }
 
     await updateProgress(job._id, 25, "Parsing PDF content...");
@@ -74,42 +87,64 @@ async function handlePdfAnalysis(job) {
     await updateProgress(job._id, 60, "Calculating risk score...");
     await updateProgress(job._id, 70, "Generating proposal draft...");
     
-    const analysisResult = await analyzeTenderText(text, job.payload.companyContext);
+    const analysisResult = await analyzeTenderText(text, job.payload.companyContext || {});
     
     await updateProgress(job._id, 85, "Finalizing results...");
 
     // Step 3: Parse & Save Results
     // We map the raw AI result to our Job Schema "result" structure
     const resultPayload = {
-      compliance_matrix: analysisResult.compliance_matrix,
-      score: analysisResult.risk_score,
+      compliance_matrix: analysisResult.compliance_matrix || [],
+      score: analysisResult.risk_score || 0,
       rationale: "Analysis complete based on extraction.",
-      proposal_draft: analysisResult.generated_proposal_draft
+      proposal_draft: analysisResult.generated_proposal_draft || ""
     };
 
-    // Step 4: Complete
-    await Job.findByIdAndUpdate(job._id, {
-      status: 'completed',
-      completedAt: new Date(),
-      progress: 100,
-      result: resultPayload
-    });
-
-    console.log(`[Queue] Job ${job._id} Completed Successfully`);
+    // Step 4: Complete - Check MongoDB connection before saving
+    if (mongoose.connection.readyState === 1) {
+      await Job.findByIdAndUpdate(job._id, {
+        status: 'completed',
+        completedAt: new Date(),
+        progress: 100,
+        result: resultPayload
+      });
+      console.log(`[Queue] Job ${job._id} Completed Successfully`);
+    } else {
+      console.error(`[Queue] Cannot save job ${job._id} - MongoDB not connected`);
+      throw new Error("Database connection lost during processing");
+    }
 
   } catch (error) {
     console.error(`[Queue] Job ${job._id} Failed:`, error.message);
-    await Job.findByIdAndUpdate(job._id, {
-      status: 'failed',
-      completedAt: new Date(),
-      result: { error: error.message }
-    });
+    
+    // Try to save error status, but don't fail if DB is down
+    try {
+      if (mongoose.connection.readyState === 1) {
+        await Job.findByIdAndUpdate(job._id, {
+          status: 'failed',
+          completedAt: new Date(),
+          result: { error: error.message }
+        });
+      }
+    } catch (dbError) {
+      console.error(`[Queue] Failed to save error status for job ${job._id}:`, dbError.message);
+    }
   }
 }
 
 async function updateProgress(jobId, percent, message) {
-  // Optional: Add a "message" field to Job if you want detailed status text in UI
-  await Job.findByIdAndUpdate(jobId, { progress: percent });
+  try {
+    // Check MongoDB connection before updating
+    if (mongoose.connection.readyState !== 1) {
+      console.warn(`[Queue] Skipping progress update - MongoDB not connected (Job: ${jobId})`);
+      return;
+    }
+    // Optional: Add a "message" field to Job if you want detailed status text in UI
+    await Job.findByIdAndUpdate(jobId, { progress: percent });
+  } catch (error) {
+    console.error(`[Queue] Failed to update progress for job ${jobId}:`, error.message);
+    // Don't throw - progress update failure shouldn't stop job processing
+  }
 }
 
 // Start the Worker - Faster polling for quicker job pickup
