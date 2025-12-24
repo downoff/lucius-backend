@@ -148,36 +148,127 @@ router.post('/', upload.single('file'), async (req, res) => {
  * Poll this endpoint to get status and results.
  */
 router.get('/jobs/:id', async (req, res) => {
+  const jobId = req.params.id;
+  const startTime = Date.now();
+  
+  console.log(`[Upload/GET] Request started for job ID: ${jobId}`);
+  console.log(`[Upload/GET] MongoDB connection state: ${mongoose.connection.readyState} (1=connected, 2=connecting, 0=disconnected)`);
+  
   try {
-    // Check MongoDB connection
-    if (mongoose.connection.readyState !== 1) {
-      return res.status(503).json({ 
-        error: 'Database unavailable',
-        message: 'Please try again in a moment'
+    // Validate job ID format first (before DB check)
+    if (!jobId || typeof jobId !== 'string' || jobId.trim().length === 0) {
+      console.warn(`[Upload/GET] Invalid job ID format: ${jobId}`);
+      return res.status(400).json({ 
+        error: 'Invalid job ID format',
+        jobId: jobId 
       });
     }
 
-    const job = await Job.findById(req.params.id);
-    if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
+    // Check if jobId looks like a valid MongoDB ObjectId (24 hex chars)
+    if (!/^[0-9a-fA-F]{24}$/.test(jobId)) {
+      console.warn(`[Upload/GET] Job ID does not match ObjectId format: ${jobId}`);
+      return res.status(400).json({ 
+        error: 'Invalid job ID format. Expected 24-character hexadecimal string.',
+        jobId: jobId 
+      });
     }
 
-    res.json({
-      id: job._id,
-      status: job.status,
-      progress: job.progress || 0, // Ensure progress is always a number
-      result: job.result,
-      createdAt: job.createdAt,
-      updatedAt: job.updatedAt
-    });
+    // Check MongoDB connection with timeout protection
+    if (mongoose.connection.readyState !== 1) {
+      console.warn(`[Upload/GET] Database not connected. State: ${mongoose.connection.readyState}`);
+      return res.status(503).json({ 
+        error: 'Database unavailable',
+        message: 'Please try again in a moment',
+        dbState: mongoose.connection.readyState
+      });
+    }
+
+    console.log(`[Upload/GET] Querying database for job: ${jobId}`);
+    
+    // Query with explicit error handling
+    let job;
+    try {
+      job = await Job.findById(jobId).lean(); // Use .lean() for faster queries, returns plain JS object
+    } catch (dbError) {
+      console.error(`[Upload/GET] Database query error for job ${jobId}:`, dbError.message);
+      console.error(`[Upload/GET] Error type: ${dbError.name}, stack: ${dbError.stack}`);
+      
+      // Handle specific MongoDB errors
+      if (dbError.name === 'CastError') {
+        return res.status(400).json({ 
+          error: 'Invalid job ID format',
+          jobId: jobId 
+        });
+      }
+      
+      // If it's a connection error, return 503
+      if (dbError.name === 'MongoNetworkError' || dbError.name === 'MongoServerSelectionError') {
+        return res.status(503).json({ 
+          error: 'Database connection error',
+          message: 'Please try again in a moment'
+        });
+      }
+      
+      // Unknown database error
+      throw dbError; // Re-throw to be caught by outer catch
+    }
+
+    if (!job) {
+      console.warn(`[Upload/GET] Job not found: ${jobId}`);
+      return res.status(404).json({ 
+        error: 'Job not found',
+        jobId: jobId 
+      });
+    }
+
+    const responseData = {
+      id: job._id || jobId,
+      status: job.status || 'unknown',
+      progress: typeof job.progress === 'number' ? job.progress : 0,
+      result: job.result || null,
+      createdAt: job.createdAt || null,
+      updatedAt: job.updatedAt || null
+    };
+
+    const duration = Date.now() - startTime;
+    console.log(`[Upload/GET] Successfully returned job ${jobId} (status: ${responseData.status}, progress: ${responseData.progress}%) in ${duration}ms`);
+    
+    return res.json(responseData);
 
   } catch (error) {
-    console.error('[Upload] Error fetching job:', error.message);
-    // Check if it's a MongoDB error
-    if (error.name === 'CastError' || error.message?.includes('Cast to ObjectId')) {
-      return res.status(400).json({ error: 'Invalid job ID format' });
+    const duration = Date.now() - startTime;
+    console.error(`[Upload/GET] ERROR after ${duration}ms for job ${jobId}:`);
+    console.error(`[Upload/GET] Error name: ${error.name}`);
+    console.error(`[Upload/GET] Error message: ${error.message}`);
+    console.error(`[Upload/GET] Error stack: ${error.stack}`);
+    
+    // Ensure we always send a response (never leave hanging)
+    if (!res.headersSent) {
+      // Check if it's a MongoDB error that we haven't handled
+      if (error.name === 'CastError' || error.message?.includes('Cast to ObjectId')) {
+        return res.status(400).json({ 
+          error: 'Invalid job ID format',
+          jobId: jobId 
+        });
+      }
+      
+      // Check if it's a connection error
+      if (error.name === 'MongoNetworkError' || error.name === 'MongoServerSelectionError' || error.name === 'MongoTimeoutError') {
+        return res.status(503).json({ 
+          error: 'Database connection error',
+          message: 'Please try again in a moment'
+        });
+      }
+      
+      // Generic error handler - always return JSON
+      return res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: 'An unexpected error occurred while fetching job status'
+      });
+    } else {
+      // Headers already sent - just log the error
+      console.error(`[Upload/GET] Cannot send error response - headers already sent for job ${jobId}`);
     }
-    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
