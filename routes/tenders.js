@@ -299,7 +299,6 @@ router.get("/demo-seed", async (_req, res) => {
  * This route exists for frontend compatibility
  */
 const multer = require('multer');
-const mongoose = require('mongoose');
 const Job = require('../models/Job');
 
 // Safely import analyzeTenderPDF - may not be available if Python backend isn't configured
