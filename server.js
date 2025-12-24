@@ -115,46 +115,52 @@ const ALLOWED_ORIGINS = [
   "https://ailucius.com",
   "http://localhost:5173",
   "http://localhost:5174", // Common alternate dev port
+  "http://localhost:3000", // Additional dev port
   "https://lucius-frontend.onrender.com", // Render preview if needed
   "https://lucius-ai.onrender.com", // Render backend URL (for same-origin requests)
   process.env.FRONTEND_URL // Allow dynamic frontend URL from env
 ].filter(Boolean); // Remove any undefined values
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-
-      // In development (localhost), allow all
-      if (process.env.NODE_ENV !== 'production' || origin.includes('localhost')) {
-        return callback(null, true);
-      }
-
-      if (ALLOWED_ORIGINS.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.warn(`[CORS] Blocked request from origin: ${origin}`);
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-request-id"],
-  })
-);
-
-// Explicit preflight handling
-app.options("*", cors({
+// CORS configuration function (reusable)
+const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      console.log('[CORS] Allowing request with no origin');
+      return callback(null, true);
+    }
+
+    // In development (non-production or localhost), allow all
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[CORS] Development mode - allowing origin: ${origin}`);
+      return callback(null, true);
+    }
+
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      console.log(`[CORS] Allowing localhost origin: ${origin}`);
+      return callback(null, true);
+    }
+
+    // Check against allowed origins
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      console.log(`[CORS] Allowing origin: ${origin}`);
       callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      console.warn(`[CORS] BLOCKED request from origin: ${origin}`);
+      console.warn(`[CORS] Allowed origins:`, ALLOWED_ORIGINS);
+      callback(new Error(`Not allowed by CORS: ${origin}`));
     }
   },
-  credentials: true
-}));
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-request-id", "x-auth-token"],
+  exposedHeaders: ["x-request-id"]
+};
+
+app.use(cors(corsOptions));
+
+// Explicit preflight handling for all routes
+app.options("*", cors(corsOptions));
 
 // --- Body Parsing with Increased Limits for PDF Uploads ---
 // Increased to 50mb to handle large PDF files
