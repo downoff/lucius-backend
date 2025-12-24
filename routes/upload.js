@@ -43,6 +43,16 @@ router.post('/', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
+    // Parse companyContext safely
+    let companyContext = {};
+    if (req.body.companyContext) {
+      try {
+        companyContext = JSON.parse(req.body.companyContext);
+      } catch (parseError) {
+        return res.status(400).json({ error: 'Invalid JSON in companyContext field' });
+      }
+    }
+
     // Create Job
     const job = new Job({
       type: 'pdf_analysis',
@@ -50,7 +60,7 @@ router.post('/', upload.single('file'), async (req, res) => {
       payload: {
         filePath: req.file.path,
         originalName: req.file.originalname,
-        companyContext: req.body.companyContext ? JSON.parse(req.body.companyContext) : {}
+        companyContext: companyContext
       }
     });
 
@@ -91,6 +101,29 @@ router.get('/jobs/:id', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
   }
+});
+
+// Error handler for multer errors (file size, file type, etc.)
+// This ensures multer errors return JSON instead of HTML
+// MUST be placed after all routes to catch errors from all route handlers
+router.use((error, req, res, next) => {
+  // Check for multer errors (they have a 'code' property)
+  if (error && error.code) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'File too large. Maximum size is 10MB.' });
+    }
+    if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ error: 'Unexpected file field. Use "file" as the field name.' });
+    }
+    return res.status(400).json({ error: error.message || 'File upload error' });
+  }
+  
+  // Handle other upload-related errors (e.g., file type validation from fileFilter)
+  if (error) {
+    return res.status(400).json({ error: error.message || 'Upload failed' });
+  }
+  
+  next(error);
 });
 
 module.exports = router;
