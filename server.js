@@ -106,7 +106,14 @@ app.post(
 // ============================================================================
 
 app.set("trust proxy", 1);
-app.use(helmet());
+
+// Configure Helmet to not interfere with CORS
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false
+}));
+
 app.use(compression());
 
 // --- CORS: Strict Production Configuration ---
@@ -161,6 +168,19 @@ app.use(cors(corsOptions));
 
 // Explicit preflight handling for all routes
 app.options("*", cors(corsOptions));
+
+// Ensure CORS headers are added to all responses (even errors)
+app.use((req, res, next) => {
+  // Ensure CORS headers are always present
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-request-id, x-auth-token');
+  }
+  next();
+});
 
 // --- Body Parsing with Increased Limits for PDF Uploads ---
 // Increased to 50mb to handle large PDF files
