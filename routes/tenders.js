@@ -299,6 +299,7 @@ router.get("/demo-seed", async (_req, res) => {
  * This route exists for frontend compatibility
  */
 const multer = require('multer');
+const path = require('path');
 const Job = require('../models/Job');
 const { analyzeTenderPDF } = require('../services/pythonAnalysisService');
 
