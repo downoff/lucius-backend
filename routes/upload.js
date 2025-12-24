@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const Job = require('../models/Job');
+const { analyzeTenderPDF } = require('../services/pythonAnalysisService');
 
 // Configure Multer for PDF Uploads
 const storage = multer.diskStorage({
@@ -53,10 +54,11 @@ router.post('/', upload.single('file'), async (req, res) => {
       }
     }
 
-    // Create Job
+    // Create Job with initial progress
     const job = new Job({
       type: 'pdf_analysis',
       status: 'pending',
+      progress: 5, // Start with 5% to show something immediately
       payload: {
         filePath: req.file.path,
         originalName: req.file.originalname,
@@ -65,6 +67,35 @@ router.post('/', upload.single('file'), async (req, res) => {
     });
 
     await job.save();
+
+    // Start analysis in background (call Python backend if available)
+    setImmediate(async () => {
+      try {
+        // Try Python backend first (advanced analysis)
+        const analysis = await analyzeTenderPDF(req.file.path);
+        
+        if (analysis) {
+          // Python analysis succeeded - update job with results
+          await Job.findByIdAndUpdate(job._id, {
+            status: 'completed',
+            progress: 100,
+            result: analysis,
+            completedAt: new Date()
+          });
+        } else {
+          // Python backend unavailable - use Node.js fallback
+          // This would trigger your existing BullMQ worker
+          console.log('[Upload] Python backend unavailable, using Node.js worker');
+          // Your existing worker will handle this
+        }
+      } catch (error) {
+        console.error('[Upload] Analysis error:', error);
+        await Job.findByIdAndUpdate(job._id, {
+          status: 'failed',
+          result: { error: error.message }
+        });
+      }
+    });
 
     res.status(201).json({
       message: 'Upload successful. Analysis started.',

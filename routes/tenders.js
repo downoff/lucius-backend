@@ -354,10 +354,11 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       }
     }
 
-    // Create Job
+    // Create Job with initial progress
     const job = new Job({
       type: 'pdf_analysis',
       status: 'pending',
+      progress: 5, // Start with 5% to show something immediately
       payload: {
         filePath: req.file.path,
         originalName: req.file.originalname,

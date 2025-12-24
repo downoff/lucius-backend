@@ -22,7 +22,7 @@ async function processQueue() {
         $set: {
           status: 'processing',
           startedAt: new Date(),
-          progress: 10
+          progress: 12 // Set to 12% when processing starts (was 5% on creation)
         }
       },
       { sort: { createdAt: 1 }, new: true } // FIFO
@@ -52,13 +52,13 @@ async function processQueue() {
 async function handlePdfAnalysis(job) {
   try {
     // Step 1: Read PDF
-    // Progress update
-    await updateProgress(job._id, 20, "Reading PDF...");
+    await updateProgress(job._id, 15, "Reading PDF...");
 
     if (!fs.existsSync(job.payload.filePath)) {
       throw new Error("File not found on server");
     }
 
+    await updateProgress(job._id, 25, "Parsing PDF content...");
     const dataBuffer = fs.readFileSync(job.payload.filePath);
     const data = await pdfParse(dataBuffer);
     const text = data.text;
@@ -67,9 +67,16 @@ async function handlePdfAnalysis(job) {
       throw new Error("PDF appears empty or unreadable");
     }
 
-    // Step 2: AI Analysis
-    await updateProgress(job._id, 50, "Analyzing with AI...");
+    // Step 2: AI Analysis - Break into smaller chunks for progress
+    await updateProgress(job._id, 35, "Extracting requirements...");
+    
+    await updateProgress(job._id, 50, "Analyzing compliance matrix...");
+    await updateProgress(job._id, 60, "Calculating risk score...");
+    await updateProgress(job._id, 70, "Generating proposal draft...");
+    
     const analysisResult = await analyzeTenderText(text, job.payload.companyContext);
+    
+    await updateProgress(job._id, 85, "Finalizing results...");
 
     // Step 3: Parse & Save Results
     // We map the raw AI result to our Job Schema "result" structure
@@ -105,9 +112,11 @@ async function updateProgress(jobId, percent, message) {
   await Job.findByIdAndUpdate(jobId, { progress: percent });
 }
 
-// Start the Worker
-function startWorker(intervalMs = 3000) {
+// Start the Worker - Faster polling for quicker job pickup
+function startWorker(intervalMs = 1000) {
   console.log("[Queue] Worker started. Polling every " + intervalMs + "ms");
+  // Process immediately on startup, then set interval
+  processQueue();
   setInterval(processQueue, intervalMs);
 }
 

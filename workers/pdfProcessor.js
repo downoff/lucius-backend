@@ -25,7 +25,7 @@ const worker = new Worker('pdf-processing-queue', async (job) => {
     await Job.findOneAndUpdate({ _id: jobId }, {
       status: 'processing',
       startedAt: new Date(),
-      progress: 10
+      progress: 12 // Start processing at 12% (was 5% on creation)
     });
 
     // 2. Parse PDF
@@ -40,20 +40,24 @@ const worker = new Worker('pdf-processing-queue', async (job) => {
     // Safety Truncate
     const safeText = rawText.substring(0, 100000);
 
-    // Update progress
-    await Job.findOneAndUpdate({ _id: jobId }, { progress: 30 });
+    // Update progress - more granular updates
+    await Job.findOneAndUpdate({ _id: jobId }, { progress: 25 });
 
     // 3. Call AI (Granular Steps)
     console.log(`[Worker] Job ${jobId}: Generating Compliance Matrix...`);
+    await Job.findOneAndUpdate({ _id: jobId }, { progress: 35 });
     const compliance = await aiService.generateWithFallback(safeText, 'compliance');
     await Job.findOneAndUpdate({ _id: jobId }, { progress: 50 });
 
     console.log(`[Worker] Job ${jobId}: Analyzing Risk...`);
+    await Job.findOneAndUpdate({ _id: jobId }, { progress: 60 });
     const risk = await aiService.generateWithFallback(safeText, 'risk');
-    await Job.findOneAndUpdate({ _id: jobId }, { progress: 70 });
+    await Job.findOneAndUpdate({ _id: jobId }, { progress: 75 });
 
     console.log(`[Worker] Job ${jobId}: Drafting Proposal...`);
+    await Job.findOneAndUpdate({ _id: jobId }, { progress: 85 });
     const proposal = await aiService.generateWithFallback(safeText, 'proposal');
+    await Job.findOneAndUpdate({ _id: jobId }, { progress: 95 });
 
     // 4. Save Results
     await Job.findOneAndUpdate({ _id: jobId }, {
