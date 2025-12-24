@@ -3,7 +3,16 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const Job = require('../models/Job');
-const { analyzeTenderPDF } = require('../services/pythonAnalysisService');
+
+// Safely import analyzeTenderPDF - may not be available if Python backend isn't configured
+let analyzeTenderPDF = null;
+try {
+  const pythonAnalysisService = require('../services/pythonAnalysisService');
+  analyzeTenderPDF = pythonAnalysisService.analyzeTenderPDF;
+} catch (error) {
+  console.warn('[Upload] Could not load pythonAnalysisService:', error.message);
+  // Function will remain null, queueWorker will handle processing
+}
 
 // Configure Multer for PDF Uploads
 const storage = multer.diskStorage({
@@ -68,32 +77,33 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     await job.save();
 
-    // Start analysis in background (call Python backend if available)
+    // Try Python backend first if available (non-blocking)
+    // If it fails or isn't available, queueWorker will pick it up
     setImmediate(async () => {
       try {
-        // Try Python backend first (advanced analysis)
-        const analysis = await analyzeTenderPDF(req.file.path);
-        
-        if (analysis) {
-          // Python analysis succeeded - update job with results
-          await Job.findByIdAndUpdate(job._id, {
-            status: 'completed',
-            progress: 100,
-            result: analysis,
-            completedAt: new Date()
-          });
-        } else {
-          // Python backend unavailable - use Node.js fallback
-          // This would trigger your existing BullMQ worker
-          console.log('[Upload] Python backend unavailable, using Node.js worker');
-          // Your existing worker will handle this
+        // Only try Python backend if function is available
+        if (analyzeTenderPDF && typeof analyzeTenderPDF === 'function') {
+          const analysis = await analyzeTenderPDF(req.file.path);
+          
+          if (analysis) {
+            // Python analysis succeeded - update job with results
+            await Job.findByIdAndUpdate(job._id, {
+              status: 'completed',
+              progress: 100,
+              result: analysis,
+              completedAt: new Date()
+            });
+            return; // Success, don't use fallback
+          }
         }
+        
+        // Python backend unavailable or not configured - queueWorker will handle it
+        console.log('[Upload] Using queueWorker for analysis');
+        // Job status remains 'pending' so queueWorker can process it
       } catch (error) {
-        console.error('[Upload] Analysis error:', error);
-        await Job.findByIdAndUpdate(job._id, {
-          status: 'failed',
-          result: { error: error.message }
-        });
+        console.error('[Upload] Python analysis error:', error.message);
+        // Don't mark as failed - let queueWorker try
+        // Job status remains 'pending' so queueWorker can process it
       }
     });
 

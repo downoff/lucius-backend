@@ -195,7 +195,11 @@ if (!mongoUri) {
 } else {
   mongoose
     .connect(mongoUri, { autoIndex: true })
-    .then(() => console.log("MongoDB Connected"))
+    .then(() => {
+      console.log("MongoDB Connected");
+      // Start queue worker after MongoDB is connected
+      startQueueWorker();
+    })
     .catch((err) => console.error("MongoDB Connection Error:", err));
 }
 
@@ -333,13 +337,28 @@ if (fs.existsSync(frontendDistPath)) {
 // Startup: Queue Worker & Server Initialization
 // ============================================================================
 
-// Start Queue Worker (Async Stability Engine)
-try {
-  // Initialize BullMQ Worker
-  require("./workers/pdfProcessor");
-  console.log("✅ [Startup] PDF Processor Worker started (BullMQ)");
-} catch (e) {
-  console.error("Failed to start Queue Worker:", e.message);
+// Start Queue Worker Function (called after MongoDB connects)
+function startQueueWorker() {
+  try {
+    // Try BullMQ Worker first (if Redis is available)
+    if (process.env.REDIS_URL) {
+      try {
+        require("./workers/pdfProcessor");
+        console.log("✅ [Startup] PDF Processor Worker started (BullMQ)");
+      } catch (bullError) {
+        console.warn("⚠️  [Startup] BullMQ worker failed, using simple queueWorker:", bullError.message);
+      }
+    } else {
+      console.log("⚠️  [Startup] REDIS_URL not set, using simple queueWorker");
+    }
+    
+    // Always start the simple queueWorker (works without Redis, polls database)
+    const { startWorker } = require("./services/queueWorker");
+    startWorker(1000); // Poll every 1 second
+    console.log("✅ [Startup] Simple Queue Worker started (Database polling)");
+  } catch (e) {
+    console.error("❌ [Startup] Failed to start Queue Worker:", e.message);
+  }
 }
 
 // Start Server
