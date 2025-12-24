@@ -164,21 +164,25 @@ const corsOptions = {
   exposedHeaders: ["x-request-id"]
 };
 
+// Apply CORS middleware
 app.use(cors(corsOptions));
 
-// Explicit preflight handling for all routes
+// Explicit preflight handling for all routes (must be before other routes)
 app.options("*", cors(corsOptions));
 
-// Ensure CORS headers are added to all responses (even errors)
+// Additional CORS header middleware - ensures headers on ALL responses including errors
 app.use((req, res, next) => {
-  // Ensure CORS headers are always present
   const origin = req.headers.origin;
+  
+  // Always add CORS headers if origin is in allowed list
   if (origin && ALLOWED_ORIGINS.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-request-id, x-auth-token');
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-request-id, x-auth-token');
+    res.setHeader('Access-Control-Expose-Headers', 'x-request-id');
   }
+  
   next();
 });
 
