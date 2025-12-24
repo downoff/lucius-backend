@@ -293,4 +293,130 @@ router.get("/demo-seed", async (_req, res) => {
   }
 });
 
+/**
+ * POST /api/tenders/upload
+ * Upload tender PDF - proxies to /api/upload route
+ * This route exists for frontend compatibility
+ */
+const multer = require('multer');
+const path = require('path');
+const Job = require('../models/Job');
+const { analyzeTenderPDF } = require('../services/pythonAnalysisService');
+
+const uploadStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, '../data/uploads');
+    const fs = require('fs');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'tender-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: uploadStorage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed!'), false);
+    }
+  },
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+});
+
+router.post('/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Parse companyContext safely
+    let companyContext = {};
+    if (req.body.companyContext) {
+      try {
+        companyContext = JSON.parse(req.body.companyContext);
+      } catch (parseError) {
+        return res.status(400).json({ error: 'Invalid JSON in companyContext field' });
+      }
+    }
+
+    // Create Job
+    const job = new Job({
+      type: 'pdf_analysis',
+      status: 'pending',
+      payload: {
+        filePath: req.file.path,
+        originalName: req.file.originalname,
+        companyContext: companyContext
+      }
+    });
+
+    await job.save();
+
+    // Start analysis in background (call Python backend if available)
+    setImmediate(async () => {
+      try {
+        // Try Python backend first (advanced analysis)
+        const analysis = await analyzeTenderPDF(req.file.path);
+        
+        if (analysis) {
+          // Python analysis succeeded - update job with results
+          await Job.findByIdAndUpdate(job._id, {
+            status: 'completed',
+            progress: 100,
+            result: analysis,
+            completedAt: new Date()
+          });
+        } else {
+          // Python backend unavailable - use Node.js fallback
+          console.log('[Tenders/Upload] Python backend unavailable, using Node.js worker');
+          // Your existing worker will handle this
+        }
+      } catch (error) {
+        console.error('[Tenders/Upload] Analysis error:', error);
+        await Job.findByIdAndUpdate(job._id, {
+          status: 'failed',
+          result: { error: error.message }
+        });
+      }
+    });
+
+    res.status(201).json({
+      message: 'Upload successful. Analysis started.',
+      jobId: job._id,
+      status: 'pending',
+      _id: job._id // For frontend compatibility
+    });
+
+  } catch (error) {
+    console.error("Tender Upload Error:", error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Error handler for multer errors
+router.use((error, req, res, next) => {
+  if (error && error.code) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'File too large. Maximum size is 50MB.' });
+    }
+    if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ error: 'Unexpected file field. Use "file" as the field name.' });
+    }
+    return res.status(400).json({ error: error.message || 'File upload error' });
+  }
+  
+  if (error) {
+    return res.status(400).json({ error: error.message || 'Upload failed' });
+  }
+  
+  next(error);
+});
+
 module.exports = router;
