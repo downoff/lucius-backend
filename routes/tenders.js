@@ -299,9 +299,17 @@ router.get("/demo-seed", async (_req, res) => {
  * This route exists for frontend compatibility
  */
 const multer = require('multer');
-
 const Job = require('../models/Job');
-const { analyzeTenderPDF } = require('../services/pythonAnalysisService');
+
+// Safely import analyzeTenderPDF - may not be available if Python backend isn't configured
+let analyzeTenderPDF = null;
+try {
+  const pythonAnalysisService = require('../services/pythonAnalysisService');
+  analyzeTenderPDF = pythonAnalysisService.analyzeTenderPDF;
+} catch (error) {
+  console.warn('[Tenders] Could not load pythonAnalysisService:', error.message);
+  // Function will remain null, code will handle this gracefully
+}
 
 const uploadStorage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -360,30 +368,32 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     await job.save();
 
     // Start analysis in background (call Python backend if available)
+    // Note: The queueWorker will handle the actual processing
+    // This is just for immediate Python backend analysis if available
     setImmediate(async () => {
       try {
-        // Try Python backend first (advanced analysis)
-        const analysis = await analyzeTenderPDF(req.file.path);
-        
-        if (analysis) {
-          // Python analysis succeeded - update job with results
-          await Job.findByIdAndUpdate(job._id, {
-            status: 'completed',
-            progress: 100,
-            result: analysis,
-            completedAt: new Date()
-          });
-        } else {
-          // Python backend unavailable - use Node.js fallback
-          console.log('[Tenders/Upload] Python backend unavailable, using Node.js worker');
-          // Your existing worker will handle this
+        // Only try Python backend if function is available
+        if (analyzeTenderPDF && typeof analyzeTenderPDF === 'function') {
+          const analysis = await analyzeTenderPDF(req.file.path);
+          
+          if (analysis) {
+            // Python analysis succeeded - update job with results
+            await Job.findByIdAndUpdate(job._id, {
+              status: 'completed',
+              progress: 100,
+              result: analysis,
+              completedAt: new Date()
+            });
+            return; // Success, don't use fallback
+          }
         }
+        
+        // Python backend unavailable or not configured - queueWorker will handle it
+        console.log('[Tenders/Upload] Using Node.js queue worker for analysis');
       } catch (error) {
-        console.error('[Tenders/Upload] Analysis error:', error);
-        await Job.findByIdAndUpdate(job._id, {
-          status: 'failed',
-          result: { error: error.message }
-        });
+        console.error('[Tenders/Upload] Python analysis error:', error.message);
+        // Don't mark as failed - let queueWorker try
+        // Job status remains 'pending' so queueWorker can process it
       }
     });
 
