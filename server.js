@@ -203,8 +203,43 @@ if (!mongoUri) {
       serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
       socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
     })
-    .then(() => {
+    .then(async () => {
       console.log("✅ MongoDB Connected");
+      
+      // Ensure demo user exists
+      try {
+        const User = require("./models/User");
+        const bcrypt = require("bcryptjs");
+        const demoEmail = "demo@ycombinator.com";
+        const demoPassword = "trylucius2026";
+        
+        let demoUser = await User.findOne({ email: demoEmail });
+        if (!demoUser) {
+          const hashedPassword = await bcrypt.hash(demoPassword, 10);
+          demoUser = new User({
+            email: demoEmail,
+            password: hashedPassword,
+            name: "YC Demo",
+            isPro: true,
+            credits: 100,
+            hasOnboarded: true,
+            niche: "General"
+          });
+          await demoUser.save();
+          console.log("✅ Created demo user: demo@ycombinator.com");
+        } else {
+          // Ensure password is correct (in case it was changed)
+          const hashedPassword = await bcrypt.hash(demoPassword, 10);
+          demoUser.password = hashedPassword;
+          demoUser.isPro = true;
+          demoUser.credits = 100;
+          await demoUser.save();
+          console.log("✅ Verified demo user: demo@ycombinator.com");
+        }
+      } catch (demoError) {
+        console.warn("⚠️  Could not ensure demo user (non-critical):", demoError.message);
+      }
+      
       // Start queue worker after MongoDB is connected
       startQueueWorker();
     })
