@@ -11,7 +11,24 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 // Register endpoint - matches frontend expectation
 router.post("/register", async (req, res) => {
   try {
-    const { email, password, referralCode, niche } = req.body;
+    const { 
+      email, 
+      password, 
+      referralCode, 
+      niche,
+      // Company profile fields (optional)
+      company_name,
+      website,
+      work_email,
+      countries,
+      cpv_codes,
+      keywords_include,
+      keywords_exclude,
+      sectors,
+      languages,
+      team_size,
+      tender_volume
+    } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ 
@@ -48,6 +65,40 @@ router.post("/register", async (req, res) => {
 
     await user.save();
 
+    // Create company profile if company data is provided
+    let company = null;
+    if (company_name) {
+      const Company = require("../models/Company");
+      
+      // Deactivate other companies for this user (if any)
+      await Company.updateMany({ owner_id: user._id }, { $set: { active: false } });
+      
+      // Parse comma-separated strings into arrays
+      const parseArray = (str) => str ? str.split(",").map(s => s.trim()).filter(Boolean) : [];
+      
+      company = new Company({
+        company_name,
+        website: website || "",
+        contact_emails: work_email ? [work_email] : [email],
+        contact_email: work_email || email,
+        countries: parseArray(countries),
+        cpv_codes: parseArray(cpv_codes),
+        keywords_include: parseArray(keywords_include),
+        keywords_exclude: parseArray(keywords_exclude),
+        languages: parseArray(languages),
+        team_size: team_size || "",
+        tender_volume: tender_volume || "",
+        owner_id: user._id,
+        active: true
+      });
+      
+      await company.save();
+      
+      // Link company to user
+      user.company_id = company._id;
+      await user.save();
+    }
+
     // Generate JWT token
     const token = jwt.sign(
       { 
@@ -68,10 +119,15 @@ router.post("/register", async (req, res) => {
         name: user.name,
         isPro: user.isPro,
         credits: user.credits,
-        hasOnboarded: user.hasOnboarded,
-        niche: user.niche
+        hasOnboarded: user.hasOnboarded || !!company, // Mark as onboarded if company created
+        niche: user.niche,
+        company_id: company ? company._id.toString() : null
       },
-      message: "User registered successfully"
+      company: company ? {
+        id: company._id.toString(),
+        company_name: company.company_name
+      } : null,
+      message: company ? "User and company profile created successfully" : "User registered successfully"
     });
   } catch (error) {
     console.error("[User Register Error]", error);
