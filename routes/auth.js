@@ -1,5 +1,6 @@
 // routes/auth.js
 const router = require("express").Router();
+const multer = require("multer");
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -7,15 +8,27 @@ const jwt = require("jsonwebtoken");
 const JWT_SECRET = process.env.JWT_SECRET || process.env.SECRET_KEY || "dev_fallback_secret_change_me";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
+// Multer for parsing multipart/form-data (FormData from browser)
+const upload = multer();
+
 // Login endpoint - matches frontend expectation (OAuth2PasswordRequestForm format)
-router.post("/login", async (req, res) => {
+// Handle multipart/form-data (FormData), application/x-www-form-urlencoded, and JSON
+router.post("/login", upload.none(), async (req, res) => {
   try {
-    // Handle both FormData (application/x-www-form-urlencoded) and JSON
+    // Handle FormData (multipart/form-data), form-urlencoded, and JSON
     // Frontend sends FormData with username (email) and password
     const username = req.body.username || req.body.email;
     const password = req.body.password;
 
+    console.log("[Auth Login] Request body:", { 
+      username, 
+      hasPassword: !!password,
+      contentType: req.headers['content-type'],
+      bodyKeys: Object.keys(req.body)
+    });
+
     if (!username || !password) {
+      console.log("[Auth Login] Missing credentials:", { username: !!username, password: !!password });
       return res.status(400).json({ 
         detail: "Missing email or password" 
       });
