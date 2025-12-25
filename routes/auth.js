@@ -1,6 +1,5 @@
 // routes/auth.js
 const router = require("express").Router();
-const multer = require("multer");
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -8,26 +7,23 @@ const jwt = require("jsonwebtoken");
 const JWT_SECRET = process.env.JWT_SECRET || process.env.SECRET_KEY || "dev_fallback_secret_change_me";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
-// Multer for parsing multipart/form-data (FormData from browser)
-const upload = multer();
-
-// Login endpoint - matches frontend expectation (OAuth2PasswordRequestForm format)
-// Handle multipart/form-data (FormData), application/x-www-form-urlencoded, and JSON
-router.post("/login", upload.none(), async (req, res) => {
+// Login endpoint - OAuth2PasswordRequestForm format (application/x-www-form-urlencoded)
+// express.urlencoded() middleware handles this automatically
+router.post("/login", async (req, res) => {
   try {
     // Handle FormData (multipart/form-data), form-urlencoded, and JSON
     // Frontend sends FormData with username (email) and password
     const username = req.body.username || req.body.email;
     const password = req.body.password;
 
-    console.log("[Auth Login] Request received:", { 
-      username, 
-      hasPassword: !!password,
-      passwordLength: password ? password.length : 0,
-      contentType: req.headers['content-type'],
-      bodyKeys: Object.keys(req.body),
-      rawBody: req.body
-    });
+    // Log for debugging (remove excessive logging in production)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log("[Auth Login] Request received:", { 
+        username, 
+        hasPassword: !!password,
+        contentType: req.headers['content-type']
+      });
+    }
 
     if (!username || !password) {
       console.log("[Auth Login] Missing credentials:", { 
@@ -42,14 +38,8 @@ router.post("/login", upload.none(), async (req, res) => {
 
     // Find user by email (username is actually email in OAuth2PasswordRequestForm)
     const user = await User.findOne({ email: username });
-    console.log("[Auth Login] User lookup:", { 
-      email: username, 
-      found: !!user,
-      hasPassword: user ? !!user.password : false
-    });
     
     if (!user) {
-      console.log("[Auth Login] User not found:", username);
       return res.status(400).json({ 
         detail: "Incorrect email or password" 
       });
@@ -57,24 +47,15 @@ router.post("/login", upload.none(), async (req, res) => {
 
     // Check if user has a password (OAuth users might not have one)
     if (!user.password) {
-      console.log("[Auth Login] User has no password (OAuth only):", username);
       return res.status(400).json({ 
         detail: "This account uses social login. Please sign in with Google." 
       });
     }
 
     // Verify password
-    console.log("[Auth Login] Comparing password...");
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    console.log("[Auth Login] Password comparison result:", isPasswordValid);
     
     if (!isPasswordValid) {
-      console.log("[Auth Login] Password mismatch for user:", username);
-      // For debugging: try to verify the hash format
-      console.log("[Auth Login] Hash info:", {
-        hashLength: user.password.length,
-        hashPrefix: user.password.substring(0, 10)
-      });
       return res.status(400).json({ 
         detail: "Incorrect email or password" 
       });
@@ -110,6 +91,22 @@ router.post("/login", upload.none(), async (req, res) => {
       detail: "Internal server error" 
     });
   }
+});
+
+// Google OAuth routes (placeholder - implement with passport-google-oauth20)
+router.get("/google", async (req, res) => {
+  // TODO: Implement Google OAuth with passport-google-oauth20
+  // For now, return a message
+  return res.status(501).json({ 
+    message: "Google OAuth not yet implemented. Please use email/password login." 
+  });
+});
+
+router.get("/google/callback", async (req, res) => {
+  // TODO: Handle Google OAuth callback
+  return res.status(501).json({ 
+    message: "Google OAuth callback not yet implemented." 
+  });
 });
 
 module.exports = router;
