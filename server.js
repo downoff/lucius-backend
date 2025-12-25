@@ -270,6 +270,8 @@ app.get("/api/debug-routes", (req, res) => {
 });
 
 // --- API Router Mounts (all /api/* routes) ---
+app.use("/api/auth", require("./routes/auth")); // Authentication routes
+app.use("/api/users", require("./routes/users")); // User routes (register, me)
 app.use("/api/company", require("./routes/company"));
 app.use("/api/tenders", require("./routes/tenders"));
 app.use("/api/viral", require("./routes/viral-growth"));
