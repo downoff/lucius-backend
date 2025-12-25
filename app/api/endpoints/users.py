@@ -1,5 +1,6 @@
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi.responses import JSONResponse
 from datetime import timedelta
 from app.api import deps
 from app.models.user import UserInDB, UserCreate
@@ -33,83 +34,93 @@ async def register_user(
     """
     Register a new user and optional company.
     """
-    # Check if user already exists
-    existing_user = await db.users.find_one({"email": email})
-    if existing_user:
-        raise HTTPException(
+    try:
+        # Check if user already exists
+        existing_user = await db.users.find_one({"email": email})
+        if existing_user:
+            # Return regular JSON with 400 to ensure frontend parses it
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "The user with this email already exists in the system."}
+            )
+        
+        # Create user object
+        user_in = UserCreate(
+            email=email,
+            name=full_name, # Map full_name to name
+            niche=niche or "General"
+        )
+        
+        # Handle referral code if provided
+        if referralCode:
+            referrer = await db.users.find_one({"referralCode": referralCode})
+            if referrer:
+                user_in.referredBy = referrer["_id"]
+        
+        user_dict = user_in.model_dump()
+        user_dict["password"] = get_password_hash(password)
+        
+        # Insert user first to get ID
+        result = await db.users.insert_one(user_dict)
+        user_id = result.inserted_id
+        
+        # Create Company if name provided
+        if company_name:
+            # Helper to split CSV strings
+            def split_csv(val: Optional[str]) -> list:
+                 if not val: return []
+                 # Handle list input if somehow passed as list
+                 if isinstance(val, list): return val
+                 return [x.strip() for x in val.split(",") if x.strip()]
+    
+            from app.models.company import CompanyInDB
+            
+            company_data = CompanyInDB(
+                company_name=company_name,
+                website=website,
+                contact_email=work_email or email,
+                countries=split_csv(countries),
+                cpv_codes=split_csv(cpv_codes),
+                keywords_include=split_csv(keywords_include),
+                keywords_exclude=split_csv(keywords_exclude),
+                languages=split_csv(languages),
+                team_size=team_size,
+                tender_volume=tender_volume,
+                industry=sectors,
+                owner_id=user_id,
+                members=[user_id]
+            )
+            
+            comp_res = await db.companies.insert_one(company_data.model_dump())
+            
+            # Link back to user
+            await db.users.update_one(
+                {"_id": user_id},
+                {"$set": {"company_id": comp_res.inserted_id}}
+            )
+            # Fetch updated user for response
+            new_user = await db.users.find_one({"_id": user_id})
+        else:
+            new_user = await db.users.find_one({"_id": user_id})
+        
+        # Create access token
+        access_token = create_access_token(
+            data={"sub": str(user_id)},
+            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": UserInDB(**new_user).model_dump(by_alias=True, exclude={"password"}),
+            "message": "User registered successfully"
+        }
+    except Exception as e:
+        print(f"Registration Error: {e}")
+        return JSONResponse(
             status_code=400,
-            detail="The user with this email already exists in the system."
+            content={"detail": f"Registration failed: {str(e)}"}
         )
-    
-    # Create user object
-    user_in = UserCreate(
-        email=email,
-        name=full_name, # Map full_name to name
-        niche=niche or "General"
-    )
-    
-    # Handle referral code if provided
-    if referralCode:
-        referrer = await db.users.find_one({"referralCode": referralCode})
-        if referrer:
-            user_in.referredBy = referrer["_id"]
-    
-    user_dict = user_in.model_dump()
-    user_dict["password"] = get_password_hash(password)
-    
-    # Insert user first to get ID
-    result = await db.users.insert_one(user_dict)
-    user_id = result.inserted_id
-    
-    # Create Company if name provided
-    if company_name:
-        # Helper to split CSV strings
-        def split_csv(val: Optional[str]) -> list:
-            if not val: return []
-            return [x.strip() for x in val.split(",") if x.strip()]
-
-        from app.models.company import CompanyInDB
-        
-        company_data = CompanyInDB(
-            company_name=company_name,
-            website=website,
-            contact_email=work_email or email,
-            countries=split_csv(countries),
-            cpv_codes=split_csv(cpv_codes),
-            keywords_include=split_csv(keywords_include),
-            keywords_exclude=split_csv(keywords_exclude),
-            languages=split_csv(languages),
-            team_size=team_size,
-            tender_volume=tender_volume,
-            industry=sectors, # Mapping sectors to industry
-            owner_id=user_id,
-            members=[user_id]
-        )
-        
-        comp_res = await db.companies.insert_one(company_data.model_dump())
-        
-        # Link back to user
-        await db.users.update_one(
-            {"_id": user_id},
-            {"$set": {"company_id": comp_res.inserted_id}}
-        )
-        # Fetch updated user for response
-        new_user = await db.users.find_one({"_id": user_id})
-    else:
-        new_user = await db.users.find_one({"_id": user_id})
-    
-    # Create access token
-    access_token = create_access_token(
-        data={"sub": str(user_id)},
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": UserInDB(**new_user).model_dump(by_alias=True, exclude={"password"}),
-        "message": "User registered successfully"
-    }
 
 @router.get("/me", response_model=UserInDB)
 async def read_user_me(
