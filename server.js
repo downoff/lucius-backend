@@ -162,7 +162,14 @@ app.use(compression());
 
 // --- Body Parsing with Increased Limits for PDF Uploads ---
 // Increased to 50mb to handle large PDF files
-// Body parsing with increased limits for PDF uploads (50mb)
+// Skip body parsing for multipart/form-data (handled by multer in routes)
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data')) {
+    return next(); // Skip body parsing, let multer handle it
+  }
+  next();
+});
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
