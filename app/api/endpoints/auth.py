@@ -66,3 +66,102 @@ async def register(
         "token_type": "bearer",
         "user": UserInDB(**new_user).model_dump(by_alias=True, exclude={"password"})
     }
+
+@router.post("/password-recovery/{email}")
+async def recover_password(email: str, db: AsyncIOMotorDatabase = Depends(deps.get_db)) -> Any:
+    """
+    Password Recovery
+    """
+    user = await db.users.find_one({"email": email})
+
+    if not user:
+        # Don't reveal that the user doesn't exist? 
+        # For this stage, let's be helpfully silent or return success message to prevent enumeration
+        # But for debugging, maybe return success 
+        return {"msg": "If this email exists, a recovery email has been sent."}
+    
+    password_reset_token = create_access_token(
+        data={"sub": str(user["_id"]), "type": "recovery"},
+        expires_delta=timedelta(hours=1)
+    )
+    
+    # MOCK EMAIL SENDING
+    print(f"============================================")
+    print(f"[EMAIL MOCK] Password Recovery for {email}")
+    print(f"Token: {password_reset_token}")
+    print(f"Link: /reset-password?token={password_reset_token}")
+    print(f"============================================")
+    
+    return {"msg": "Password recovery email sent"}
+
+@router.post("/reset-password")
+async def reset_password(
+    token: str = Body(...),
+    new_password: str = Body(...),
+    db: AsyncIOMotorDatabase = Depends(deps.get_db)
+) -> Any:
+    """
+    Reset password
+    """
+    from jose import jwt, JWTError
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = payload.get("sub")
+        token_type = payload.get("type")
+        if not user_id or token_type != "recovery":
+             raise HTTPException(status_code=400, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid token")
+        
+    user = await db.users.find_one({"_id": deps.ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    hashed_password = get_password_hash(new_password)
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"password": hashed_password}}
+    )
+    return {"msg": "Password updated successfully"}
+
+@router.post("/request-verification")
+async def request_verification(
+    current_user: UserInDB = Depends(deps.get_current_user), 
+) -> Any:
+    """
+    Request Email Verification
+    """
+    token = create_access_token(
+        data={"sub": str(current_user.id), "type": "verification"},
+        expires_delta=timedelta(hours=24)
+    )
+    
+    # MOCK EMAIL SENDING
+    print(f"============================================")
+    print(f"[EMAIL MOCK] Email Verification for {current_user.email}")
+    print(f"Token: {token}")
+    print(f"Link: /verify-email?token={token}")
+    print(f"============================================")
+    
+    return {"msg": "Verification email sent"}
+
+@router.get("/verify-email")
+async def verify_email(token: str, db: AsyncIOMotorDatabase = Depends(deps.get_db)) -> Any:
+    """
+    Verify Email
+    """
+    from jose import jwt, JWTError
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = payload.get("sub")
+        token_type = payload.get("type")
+        if not user_id or token_type != "verification":
+             raise HTTPException(status_code=400, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid token")
+        
+    await db.users.update_one(
+        {"_id": deps.ObjectId(user_id)},
+        {"$set": {"emailVerified": True}}
+    )
+    return {"msg": "Email verified successfully"}
