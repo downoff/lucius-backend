@@ -20,15 +20,21 @@ router.post("/login", upload.none(), async (req, res) => {
     const username = req.body.username || req.body.email;
     const password = req.body.password;
 
-    console.log("[Auth Login] Request body:", { 
+    console.log("[Auth Login] Request received:", { 
       username, 
       hasPassword: !!password,
+      passwordLength: password ? password.length : 0,
       contentType: req.headers['content-type'],
-      bodyKeys: Object.keys(req.body)
+      bodyKeys: Object.keys(req.body),
+      rawBody: req.body
     });
 
     if (!username || !password) {
-      console.log("[Auth Login] Missing credentials:", { username: !!username, password: !!password });
+      console.log("[Auth Login] Missing credentials:", { 
+        username: !!username, 
+        password: !!password,
+        body: req.body 
+      });
       return res.status(400).json({ 
         detail: "Missing email or password" 
       });
@@ -36,7 +42,14 @@ router.post("/login", upload.none(), async (req, res) => {
 
     // Find user by email (username is actually email in OAuth2PasswordRequestForm)
     const user = await User.findOne({ email: username });
+    console.log("[Auth Login] User lookup:", { 
+      email: username, 
+      found: !!user,
+      hasPassword: user ? !!user.password : false
+    });
+    
     if (!user) {
+      console.log("[Auth Login] User not found:", username);
       return res.status(400).json({ 
         detail: "Incorrect email or password" 
       });
@@ -44,14 +57,24 @@ router.post("/login", upload.none(), async (req, res) => {
 
     // Check if user has a password (OAuth users might not have one)
     if (!user.password) {
+      console.log("[Auth Login] User has no password (OAuth only):", username);
       return res.status(400).json({ 
         detail: "This account uses social login. Please sign in with Google." 
       });
     }
 
     // Verify password
+    console.log("[Auth Login] Comparing password...");
     const isPasswordValid = await bcrypt.compare(password, user.password);
+    console.log("[Auth Login] Password comparison result:", isPasswordValid);
+    
     if (!isPasswordValid) {
+      console.log("[Auth Login] Password mismatch for user:", username);
+      // For debugging: try to verify the hash format
+      console.log("[Auth Login] Hash info:", {
+        hashLength: user.password.length,
+        hashPrefix: user.password.substring(0, 10)
+      });
       return res.status(400).json({ 
         detail: "Incorrect email or password" 
       });
