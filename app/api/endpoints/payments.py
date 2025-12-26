@@ -8,6 +8,7 @@ from bson import ObjectId
 import stripe
 import os
 import traceback
+import uuid
 
 router = APIRouter()
 
@@ -86,14 +87,33 @@ async def checkout_session(
             # AUTO-CREATE COMPANY "My Workspace"
             from app.models.company import CompanyInDB
             
+            # Generate unique referral_code to prevent DuplicateKeyError
+            referral_code = str(uuid.uuid4())[:8]
+            print(f"DEBUG: Generated referral_code: {referral_code}", flush=True)
+            
             company_data = CompanyInDB(
                 company_name=f"{current_user.name or 'User'}'s Workspace",
                 owner_id=current_user.id,
                 members=[current_user.id],
-                contact_email=current_user.email
+                contact_email=current_user.email,
+                referral_code=referral_code  # Always set to prevent null duplicate key error
             )
             
-            comp_res = await db.companies.insert_one(company_data.model_dump())
+            try:
+                comp_res = await db.companies.insert_one(company_data.model_dump())
+            except Exception as db_error:
+                # Handle potential duplicate key errors
+                error_msg = str(db_error)
+                print(f"PAYMENT CRASH: Database error creating company: {error_msg}", flush=True)
+                print(f"PAYMENT CRASH: Error type: {type(db_error).__name__}", flush=True)
+                if "duplicate key" in error_msg.lower() or "duplicatekeyerror" in error_msg.lower():
+                    # Retry with a new referral_code
+                    referral_code = str(uuid.uuid4())[:8]
+                    print(f"DEBUG: Retrying with new referral_code: {referral_code}", flush=True)
+                    company_data.referral_code = referral_code
+                    comp_res = await db.companies.insert_one(company_data.model_dump())
+                else:
+                    raise
             company_id = comp_res.inserted_id
             print(f"DEBUG: Created new company with ID: {company_id}")
             
@@ -137,7 +157,7 @@ async def checkout_session(
             error_msg = str(service_error)
             print(f"PAYMENT CRASH: Error from payment_service: {error_msg}", flush=True)
             print(f"PAYMENT CRASH: Error type: {type(service_error).__name__}", flush=True)
-            import traceback
+            # traceback is already imported at top of file
             print(f"PAYMENT CRASH: Service stack trace:\n{traceback.format_exc()}", flush=True)
             # Re-raise to be caught by outer exception handler
             raise Exception(f"Payment service error: {error_msg}") from service_error
