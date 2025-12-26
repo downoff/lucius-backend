@@ -18,7 +18,7 @@ async def send_email(to_email: str, subject: str, html_content: str):
         # For high scale, run in a separate thread/task or use async http client.
         # For simplicity in this codebase, direct call.
         params = {
-            "from": "Lucius AI <onboarding@resend.dev>", # Default Testing Domain
+            "from": "Lucius AI <onboarding@www.ailucius.com>", 
             "to": [to_email],
             "subject": subject,
             "html": html_content,
