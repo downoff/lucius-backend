@@ -21,6 +21,7 @@ async def checkout_session(
     Create a Stripe checkout session with DEEP DEBUGGING for 500 errors.
     """
     try:
+        print(f"PAYMENT CRASH: Starting checkout_session endpoint", flush=True)
         print("=" * 80)
         print("DEBUG: Starting checkout session creation...")
         print(f"DEBUG: User {current_user.email} (ID: {current_user.id}) initiating checkout.")
@@ -118,7 +119,17 @@ async def checkout_session(
         print("\n--- CREATING STRIPE SESSION ---")
         print(f"DEBUG: Calling create_checkout_session with price_id: {final_price_id}", flush=True)
         
-        session, cid = await create_checkout_session(company, final_price_id)
+        try:
+            session, cid = await create_checkout_session(company, final_price_id)
+        except Exception as service_error:
+            # Catch errors from payment_service and re-raise with more context
+            error_msg = str(service_error)
+            print(f"PAYMENT CRASH: Error from payment_service: {error_msg}", flush=True)
+            print(f"PAYMENT CRASH: Error type: {type(service_error).__name__}", flush=True)
+            import traceback
+            print(f"PAYMENT CRASH: Service stack trace:\n{traceback.format_exc()}", flush=True)
+            # Re-raise to be caught by outer exception handler
+            raise Exception(f"Payment service error: {error_msg}") from service_error
         
         print(f"DEBUG: Session created successfully: {session.id}")
         print(f"DEBUG: Session URL: {session.url}")
@@ -177,8 +188,9 @@ async def checkout_session(
             content={"detail": error_message}
         )
         
-    except HTTPException:
+    except HTTPException as e:
         # Re-raise HTTP exceptions as-is (these are intentional errors)
+        print(f"PAYMENT CRASH: HTTPException raised: {e.status_code} - {e.detail}", flush=True)
         raise
         
     except Exception as e:

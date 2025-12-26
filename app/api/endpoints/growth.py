@@ -16,18 +16,30 @@ async def get_streak(
     Matches frontend expectation: GET /api/growth/streak/<user_id>
     """
     try:
-        print(f"DEBUG: Streak endpoint called for user_id: {user_id}")
+        print(f"DEBUG: Streak endpoint called for user_id: {user_id}", flush=True)
         
         # Find user by ID
         try:
             user = await db.users.find_one({"_id": ObjectId(user_id)})
         except Exception as e:
-            print(f"ERROR: Invalid user_id format: {user_id}, error: {str(e)}")
-            raise HTTPException(status_code=400, detail=f"Invalid user ID format: {str(e)}")
+            print(f"ERROR: Invalid user_id format: {user_id}, error: {str(e)}", flush=True)
+            # Return 200 with success:false instead of 404 to avoid breaking frontend
+            return {
+                "success": False,
+                "currentStreak": 0,
+                "message": "User not found",
+                "error": f"Invalid user ID format: {str(e)}"
+            }
         
         if not user:
-            print(f"ERROR: User not found: {user_id}")
-            raise HTTPException(status_code=404, detail="User not found")
+            print(f"WARNING: User not found: {user_id}, returning default streak", flush=True)
+            # Return 200 with success:false instead of 404 to avoid breaking frontend
+            return {
+                "success": False,
+                "currentStreak": 0,
+                "message": "User not found",
+                "error": "User not found in database"
+            }
         
         print(f"DEBUG: User found: {user.get('email', 'N/A')}")
         
