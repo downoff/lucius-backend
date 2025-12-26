@@ -86,10 +86,13 @@ async def recover_password(email: str, db: AsyncIOMotorDatabase = Depends(deps.g
     )
     
     # MOCK EMAIL SENDING
+    base_url = "https://lucius-ai.onrender.com"
+    recovery_link = f"{base_url}/login?resetToken={password_reset_token}" # Or separate reset page
+
     print(f"============================================")
     print(f"[EMAIL MOCK] Password Recovery for {email}")
     print(f"Token: {password_reset_token}")
-    print(f"Link: /reset-password?token={password_reset_token}")
+    print(f"CLICK HERE: {recovery_link}")
     print(f"============================================")
     
     return {"msg": "Password recovery email sent"}
@@ -137,10 +140,14 @@ async def request_verification(
     )
     
     # MOCK EMAIL SENDING
+    # In production, use settings.FRONTEND_URL or similar
+    base_url = "https://lucius-ai.onrender.com" 
+    verification_link = f"{base_url}/verify-email?token={token}"
+    
     print(f"============================================")
     print(f"[EMAIL MOCK] Email Verification for {current_user.email}")
     print(f"Token: {token}")
-    print(f"Link: /verify-email?token={token}")
+    print(f"CLICK HERE: {verification_link}")
     print(f"============================================")
     
     return {"msg": "Verification email sent"}
@@ -165,3 +172,71 @@ async def verify_email(token: str, db: AsyncIOMotorDatabase = Depends(deps.get_d
         {"$set": {"emailVerified": True}}
     )
     return {"msg": "Email verified successfully"}
+
+@router.post("/google")
+async def google_login(
+    payload: dict = Body(...),
+    db: AsyncIOMotorDatabase = Depends(deps.get_db)
+) -> Any:
+    """
+    Google Login/Signup
+    Payload: { "token": "..." }
+    """
+    token = payload.get("token")
+    if not token:
+        raise HTTPException(status_code=400, detail="Token required")
+
+    import httpx
+    
+    # Verify token with Google
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={token}")
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail="Invalid Google Token")
+            google_data = resp.json()
+    except Exception as e:
+        print(f"Google Auth Error: {e}")
+        raise HTTPException(status_code=400, detail="Google authentication failed")
+
+    # Optional: Verify Audience matches Client ID
+    # if settings.GOOGLE_CLIENT_ID and google_data.get("aud") != settings.GOOGLE_CLIENT_ID:
+    #    raise HTTPException(status_code=400, detail="Invalid Client ID")
+
+    email = google_data.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email not found in Google Token")
+
+    user_doc = await db.users.find_one({"email": email})
+    
+    if not user_doc:
+        # Create User
+        new_user = {
+            "email": email,
+            "full_name": google_data.get("name", ""),
+            "password": get_password_hash("GOOGLE_AUTH_" + create_access_token({})), # Random unguessable password
+            "google_id": google_data.get("sub"),
+            "emailVerified": True, # Trusted from Google
+            "picture": google_data.get("picture"),
+        }
+        result = await db.users.insert_one(new_user)
+        user_id = str(result.inserted_id)
+        user_doc = new_user
+        user_doc["_id"] = result.inserted_id # Ensure it has ID for model wrap
+    else:
+        user_id = str(user_doc["_id"])
+        # Update google_id if missing
+        if "google_id" not in user_doc:
+             await db.users.update_one({"_id": user_doc["_id"]}, {"$set": {"google_id": google_data.get("sub"), "picture": google_data.get("picture")}})
+
+    # Generate JWT
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user_id}, expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": UserInDB(**user_doc).model_dump(by_alias=True, exclude={"password"})
+    }
