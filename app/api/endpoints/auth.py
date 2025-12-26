@@ -61,6 +61,26 @@ async def register(
     )
     
     new_user = await db.users.find_one({"_id": result.inserted_id})
+    
+    # SEND VERIFICATION EMAIL (Auto)
+    try:
+        token = create_access_token(
+            data={"sub": str(result.inserted_id), "type": "verification"},
+            expires_delta=timedelta(hours=24)
+        )
+        from app.services import email_service
+        base_url = "https://lucius-ai.onrender.com" 
+        verification_link = f"{base_url}/verify-email?token={token}"
+        
+        html_content = f"""
+        <p>Welcome to Lucius AI!</p>
+        <p>Thanks for signing up. Please verify your email to secure your account:</p>
+        <a href="{verification_link}">Verify Email</a>
+        """
+        await email_service.send_email(user_in.email, "Welcome to Lucius AI! Verify your email", html_content)
+    except Exception as e:
+        print(f"Failed to send signup verification email: {e}")
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
