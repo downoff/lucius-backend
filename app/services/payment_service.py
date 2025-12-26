@@ -11,9 +11,9 @@ if settings.STRIPE_SECRET_KEY:
     stripe.api_key = settings.STRIPE_SECRET_KEY
 
 async def get_frontend_base():
-    # Helper to get frontend URL from config/env
-    # In a real app this might be stricter
-    return "http://localhost:5173"
+    import os
+    # Default to production URL if not set locally
+    return os.getenv("FRONTEND_URL", "https://lucius-ai.onrender.com")
 
 async def create_checkout_session(company: dict, price_id: str):
     if not settings.STRIPE_SECRET_KEY:
@@ -28,9 +28,6 @@ async def create_checkout_session(company: dict, price_id: str):
             metadata={"company_id": str(company["_id"])}
         )
         customer_id = customer.id
-        # We need to update user in DB here or outside. 
-        # This function returns session, let caller update DB if needed or do it here.
-        # For refined architecture, caller should handle DB updates, but we'll return customer_id
     
     base = await get_frontend_base()
     
@@ -38,8 +35,9 @@ async def create_checkout_session(company: dict, price_id: str):
         mode="subscription",
         customer=customer_id,
         line_items=[{"price": price_id, "quantity": 1}],
-        success_url=f"{base}/success",
-        cancel_url=f"{base}/cancel",
+        success_url=f"{base}/dashboard?checkout_success=true",
+        cancel_url=f"{base}/pricing?checkout_canceled=true",
+        client_reference_id=str(company["_id"]),
         metadata={"company_id": str(company["_id"])}
     )
     
