@@ -11,22 +11,18 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 router = APIRouter()
 
-class LoginSchema(BaseModel):
-    email: str
-    password: str
-
 @router.post("/login")
 async def login(
-    login_data: LoginSchema,
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncIOMotorDatabase = Depends(deps.get_db)
 ) -> Any:
-    # login_data.email is the email
-    user_doc = await db.users.find_one({"email": login_data.email})
+    # form_data.username is the email
+    user_doc = await db.users.find_one({"email": form_data.username})
     if not user_doc:
          raise HTTPException(status_code=400, detail="Incorrect email or password")
     
     user = UserInDB(**user_doc)
-    if not verify_password(login_data.password, user.password):
+    if not verify_password(form_data.password, user.password):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
         
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
