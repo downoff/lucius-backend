@@ -123,8 +123,10 @@ Extract the following in JSON format:
 3. "budget": Estimated value if found, else "Unknown".
 4. "deadline": Submission deadline (YYYY-MM-DD) if found.
 5. "region": Location/Region.
-6. "compliance_constraints": A list of objects with "clause", "severity" (HIGH/MEDIUM), "page_ref".
-   - Focus on certifications (ISO), financial guarantees, hard deadlines, and pass/fail criteria.
+6. "compliance_constraints": A list of objects with "clause", "severity" (HIGH/MEDIUM), "page_ref", and "risk_type".
+   - "page_ref": MUST cite the specific Page Number based on the '--- Page X ---' markers in the text.
+   - "risk_type": Categorize as 'Legal', 'Financial', 'Technical', or 'Compliance'.
+   - Focus on certifications (ISO), financial guarantees, liability caps, and hard deadlines.
 
 Return ONLY valid JSON.
 """

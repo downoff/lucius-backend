@@ -31,7 +31,8 @@ async def upload_tender(
         pdf_file = io.BytesIO(contents)
         reader = PdfReader(pdf_file)
         text = ""
-        for page in reader.pages:
+        for i, page in enumerate(reader.pages):
+            text += f"--- Page {i+1} ---\n"
             text += page.extract_text() + "\n"
             
         # AI Extraction
