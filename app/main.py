@@ -29,7 +29,12 @@ app.include_router(ai_tender.router, prefix="/api/ai-tender", tags=["ai-tender"]
 app.include_router(payments.router, prefix="/api/payments", tags=["payments"])
 app.include_router(viral.router, prefix="/api/viral", tags=["viral"])
 app.include_router(scoring.router, prefix="/api/scoring", tags=["scoring"])
+app.include_router(scoring.router, prefix="/api/scoring", tags=["scoring"])
 app.include_router(dashboard.router, prefix="/api/admin", tags=["admin"])
+
+# Public/Viral routes
+from app.api.endpoints import public
+app.include_router(public.router, prefix="/api/public", tags=["public"])
 
 @app.on_event("startup")
 async def startup_db_client():
