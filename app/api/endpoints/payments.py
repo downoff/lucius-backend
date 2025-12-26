@@ -9,6 +9,7 @@ import stripe
 import os
 import traceback
 import uuid
+import secrets
 
 router = APIRouter()
 
@@ -99,19 +100,31 @@ async def checkout_session(
                 referral_code=referral_code  # Always set to prevent null duplicate key error
             )
             
+            # Convert to dict for modification
+            company_dict = company_data.model_dump()
+            
+            # Generate unique api_key to prevent DuplicateKeyError
+            if not company_dict.get("api_key"):
+                # Generate a secure, unique API key
+                company_dict["api_key"] = f"sk_live_{secrets.token_hex(16)}"
+                print(f"DEBUG: Generated API Key: {company_dict.get('api_key')}", flush=True)
+            
             try:
-                comp_res = await db.companies.insert_one(company_data.model_dump())
+                comp_res = await db.companies.insert_one(company_dict)
             except Exception as db_error:
                 # Handle potential duplicate key errors
                 error_msg = str(db_error)
                 print(f"PAYMENT CRASH: Database error creating company: {error_msg}", flush=True)
                 print(f"PAYMENT CRASH: Error type: {type(db_error).__name__}", flush=True)
                 if "duplicate key" in error_msg.lower() or "duplicatekeyerror" in error_msg.lower():
-                    # Retry with a new referral_code
+                    # Retry with new referral_code and api_key
                     referral_code = str(uuid.uuid4())[:8]
                     print(f"DEBUG: Retrying with new referral_code: {referral_code}", flush=True)
-                    company_data.referral_code = referral_code
-                    comp_res = await db.companies.insert_one(company_data.model_dump())
+                    company_dict["referral_code"] = referral_code
+                    # Also regenerate api_key in case that was the duplicate
+                    company_dict["api_key"] = f"sk_live_{secrets.token_hex(16)}"
+                    print(f"DEBUG: Retrying with new API Key: {company_dict.get('api_key')}", flush=True)
+                    comp_res = await db.companies.insert_one(company_dict)
                 else:
                     raise
             company_id = comp_res.inserted_id
