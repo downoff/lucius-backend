@@ -55,38 +55,31 @@ async def ensure_paid(
 async def generate_draft(
     tender_id: Optional[str] = Body(None),
     tender_text: Optional[str] = Body(None),
-    company_id: Optional[str] = Body(None), # Used by ensure_paid
-    db: AsyncIOMotorDatabase = Depends(deps.get_db)
-    # In a real app, use Depends(ensure_paid) or functional logic
+    db: AsyncIOMotorDatabase = Depends(deps.get_db),
+    current_user: Any = Depends(deps.get_current_user)
 ):
-    # Manual paywall check to replicate Node logic closely inside the route
-    if not company_id:
-         # Fallback: Create a mock/generic company profile just for the draft if allowed?
-         # Node: returns fallback if keys missing or just proceeds if no company ID?
-         # Node router.post("/draft", ensurePaid...) -> ensurePaid fails if no company_id.
-         # EXCEPT for "DEMO-FRIENDLY" note? 
-         # "DOES NOT REQUIRE company_id" says the comment in Node file!
-         # Wait, looking at lines 173+: "POST /api/ai-tender/draft - DOES NOT REQUIRE company_id"
-         # But line 181 says `router.post("/draft", ensurePaid, ...)` ?
-         # Ah, `ensurePaid` (line 125) checks company_id.
-         # Actually wait, the comment says "DOES NOT REQUIRE" but the code `router.post("/draft", ensurePaid` uses the middleware.
-         # Let's check `ensurePaid` again.
-         # It returns 400 if no company_id.
-         # So the comment might be outdated or I misread "DEMO-FRIENDLY" context.
-         # However, for migration safety, let's implement the logic.
-         pass
+    # 1. Strict Paywall Enforcement
+    if not current_user.company_id:
+         raise HTTPException(status_code=402, detail="No company found. Please upgrade.")
 
-    # If no company_id, we can try to proceed with generic data if we want to be nicer than the Node Code
-    company_data = None
-    if company_id:
-        company_data = await db.companies.find_one({"_id": ObjectId(company_id)})
-        # Paywall check logic...
+    company = await db.companies.find_one({"_id": current_user.company_id})
+    if not company:
+         raise HTTPException(status_code=404, detail="Company not found")
+
+    # Allow if 'is_paid' is True OR plan is 'agency'/'enterprise'
+    # Also allow if company name contains "Demo" (for internal testing)
+    is_paid = company.get("is_paid", False) or \
+              company.get("plan") in ["Agency", "Enterprise", "agency", "enterprise"]
+
+    if not is_paid and "demo" not in company.get("company_name", "").lower():
+         raise HTTPException(status_code=402, detail="Premium Feature: Please upgrade to Pro to use AI Drafting.")
+    
+    company_data = company
 
     # Content resolution
     final_text = tender_text
     if not final_text and tender_id:
         t = await db.tenders.find_one({"_id": ObjectId(tender_id)})
-        if t:
             final_text = f"{t.get('title', '')}\n{t.get('description_raw', '')}"
             
     if not final_text:
