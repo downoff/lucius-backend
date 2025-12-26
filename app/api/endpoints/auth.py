@@ -6,22 +6,27 @@ from app.core.config import settings
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.api import deps
 from app.models.user import UserCreate, UserInDB
+from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 router = APIRouter()
 
+class LoginSchema(BaseModel):
+    email: str
+    password: str
+
 @router.post("/login")
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    login_data: LoginSchema,
     db: AsyncIOMotorDatabase = Depends(deps.get_db)
 ) -> Any:
-    # form_data.username is the email
-    user_doc = await db.users.find_one({"email": form_data.username})
+    # login_data.email is the email
+    user_doc = await db.users.find_one({"email": login_data.email})
     if not user_doc:
          raise HTTPException(status_code=400, detail="Incorrect email or password")
     
     user = UserInDB(**user_doc)
-    if not verify_password(form_data.password, user.password):
+    if not verify_password(login_data.password, user.password):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
         
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
