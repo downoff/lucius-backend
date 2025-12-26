@@ -1,10 +1,12 @@
-# CHROMADB SQLITE FIX FOR RENDER
+# Load environment variables from .env file (for local development)
 try:
-    __import__('pysqlite3')
-    import sys
-    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("DEBUG: Loaded environment variables from .env file")
 except ImportError:
-    pass
+    print("WARNING: python-dotenv not installed, skipping .env file load")
+except Exception as e:
+    print(f"WARNING: Error loading .env file: {str(e)}")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,21 +21,14 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://lucius-frontend-1.onrender.com",
-        "https://www.ailucius.com",
-        "https://ailucius.com"
-    ],
+    allow_origins=["*"], # Allow all for debugging/demo
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Router imports
-# Router imports
-from app.api.endpoints import auth, users, tenders, company, ai_tender, payments, viral, scoring, dashboard
+from app.api.endpoints import auth, users, tenders, company, ai_tender, payments, viral, scoring, dashboard, tender_analysis, growth
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
@@ -42,13 +37,10 @@ app.include_router(company.router, prefix="/api/company", tags=["company"])
 app.include_router(ai_tender.router, prefix="/api/ai-tender", tags=["ai-tender"])
 app.include_router(payments.router, prefix="/api/payments", tags=["payments"])
 app.include_router(viral.router, prefix="/api/viral", tags=["viral"])
-app.include_router(scoring.router, prefix="/api/scoring", tags=["scoring"])
+app.include_router(growth.router, prefix="/api/growth", tags=["growth"])
 app.include_router(scoring.router, prefix="/api/scoring", tags=["scoring"])
 app.include_router(dashboard.router, prefix="/api/admin", tags=["admin"])
-
-# Public/Viral routes
-from app.api.endpoints import public
-app.include_router(public.router, prefix="/api/public", tags=["public"])
+app.include_router(tender_analysis.router)  # Already has /api/tender-analysis prefix
 
 @app.on_event("startup")
 async def startup_db_client():

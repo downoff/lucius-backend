@@ -1,41 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException
 from app.api import deps
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from pydantic import BaseModel, EmailStr
-from datetime import datetime, timedelta
+from datetime import datetime
 from bson import ObjectId
 
 router = APIRouter()
-
-class InterestRequest(BaseModel):
-    email: EmailStr
-    source: str = "investor_landing"  # investor_landing, waitlist, viral_share
-
-@router.post("/interest")
-async def register_interest(
-    data: InterestRequest,
-    db: AsyncIOMotorDatabase = Depends(deps.get_db)
-):
-    """
-    Capture investor or user interest (Waitlist).
-    """
-    existing = await db.leads.find_one({"email": data.email})
-    if existing:
-        return {"status": "already_registered", "message": "You are already on the list!"}
-    
-    lead = {
-        "email": data.email,
-        "source": data.source,
-        "created_at": datetime.utcnow(),
-        "status": "new"
-    }
-    
-    await db.leads.insert_one(lead)
-    
-    # In a real app, trigger a Slack webhook here
-    print(f"💰 New Lead Captured: {data.email} via {data.source}")
-    
-    return {"status": "success", "message": "Access requested successfully."}
 
 @router.get("/streak/{user_id}")
 async def get_streak(
@@ -44,13 +13,23 @@ async def get_streak(
 ):
     """
     Get or update user streak for daily engagement tracking.
+    Matches frontend expectation: GET /api/growth/streak/<user_id>
     """
     try:
+        print(f"DEBUG: Streak endpoint called for user_id: {user_id}")
+        
         # Find user by ID
-        user = await db.users.find_one({"_id": ObjectId(user_id)})
+        try:
+            user = await db.users.find_one({"_id": ObjectId(user_id)})
+        except Exception as e:
+            print(f"ERROR: Invalid user_id format: {user_id}, error: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Invalid user ID format: {str(e)}")
         
         if not user:
+            print(f"ERROR: User not found: {user_id}")
             raise HTTPException(status_code=404, detail="User not found")
+        
+        print(f"DEBUG: User found: {user.get('email', 'N/A')}")
         
         # Get current date (UTC)
         today = datetime.utcnow().date()
@@ -59,10 +38,11 @@ async def get_streak(
         last_active = user.get("last_active")
         if last_active:
             if isinstance(last_active, str):
-                last_active = datetime.fromisoformat(last_active.replace('Z', '+00:00'))
-            elif isinstance(last_active, datetime):
-                pass
-            else:
+                try:
+                    last_active = datetime.fromisoformat(last_active.replace('Z', '+00:00'))
+                except:
+                    last_active = datetime.utcnow()
+            elif not isinstance(last_active, datetime):
                 last_active = datetime.utcnow()
             last_active_date = last_active.date() if hasattr(last_active, 'date') else last_active
         else:
@@ -76,16 +56,19 @@ async def get_streak(
             
             if days_diff == 0:
                 # Same day, maintain streak
-                pass
+                print(f"DEBUG: Same day, maintaining streak: {current_streak}")
             elif days_diff == 1:
                 # Consecutive day, increment streak
                 current_streak += 1
+                print(f"DEBUG: Consecutive day, incrementing streak to: {current_streak}")
             else:
                 # Broke streak, reset to 1
                 current_streak = 1
+                print(f"DEBUG: Streak broken ({days_diff} days), resetting to 1")
         else:
             # First time, start streak at 1
             current_streak = 1
+            print(f"DEBUG: First time tracking, starting streak at 1")
         
         # Update user with new streak and last_active
         await db.users.update_one(
@@ -106,6 +89,8 @@ async def get_streak(
         else:
             message = "Keep the streak going!"
         
+        print(f"DEBUG: Returning streak: {current_streak}")
+        
         return {
             "success": True,
             "currentStreak": current_streak,
@@ -120,3 +105,4 @@ async def get_streak(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to track streak: {str(e)}")
+
