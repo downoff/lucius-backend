@@ -13,7 +13,11 @@ if settings.STRIPE_SECRET_KEY:
 
 async def get_frontend_base():
     # Get Base URL (Handle Localhost vs Production automatically)
-    return os.getenv("FRONTEND_URL", settings.FRONTEND_URL or "http://localhost:5173")
+    frontend_url = os.getenv("FRONTEND_URL", settings.FRONTEND_URL or "http://localhost:5173")
+    # DEFENSIVE CODING: Strip whitespace and remove trailing slash
+    if frontend_url:
+        frontend_url = frontend_url.strip().rstrip('/')
+    return frontend_url
 
 async def create_checkout_session(company: dict, price_id: str):
     """
@@ -31,6 +35,9 @@ async def create_checkout_session(company: dict, price_id: str):
         if not stripe_secret_key:
             print("CRITICAL [payment_service]: STRIPE_SECRET_KEY is missing!")
             raise Exception("Server config error: STRIPE_SECRET_KEY is missing")
+        
+        # DEFENSIVE CODING: Strip whitespace from key
+        stripe_secret_key = stripe_secret_key.strip()
         
         print(f"DEBUG [payment_service]: Stripe key loaded (preview: {stripe_secret_key[:4]}...)")
         stripe.api_key = stripe_secret_key
@@ -129,6 +136,8 @@ async def create_portal_session(company: dict):
         if not stripe_secret_key:
             raise Exception("Server config error: STRIPE_SECRET_KEY is missing")
         
+        # DEFENSIVE CODING: Strip whitespace from key
+        stripe_secret_key = stripe_secret_key.strip()
         stripe.api_key = stripe_secret_key
 
         customer_id = company.get("stripe_customer_id")

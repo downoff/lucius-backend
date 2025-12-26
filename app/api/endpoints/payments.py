@@ -39,6 +39,16 @@ async def checkout_session(
         from app.core.config import settings
         if not stripe_key:
             stripe_key = settings.STRIPE_SECRET_KEY
+        
+        # DEFENSIVE CODING: Strip whitespace if keys exist
+        if stripe_key:
+            stripe_key = stripe_key.strip()
+        else:
+            print("CRITICAL: STRIPE_SECRET_KEY is missing!", flush=True)
+        
+        if frontend_url:
+            frontend_url = frontend_url.strip().rstrip('/')  # Remove trailing slash too
+        
         if not env_price_id:
             env_price_id = None  # Will use request param or fail
         
@@ -108,11 +118,12 @@ async def checkout_session(
         print("\n--- STRIPE CONFIGURATION ---")
         
         # DEBUG: Print variables before Stripe calls
-        print(f"Using Frontend URL: {os.getenv('FRONTEND_URL')}", flush=True)
-        print(f"Stripe Key exists: {bool(os.getenv('STRIPE_SECRET_KEY'))}", flush=True)
+        print(f"Using Frontend URL: {frontend_url}", flush=True)
+        print(f"Stripe Key exists: {bool(stripe_key)}", flush=True)
         print(f"Final price_id: {final_price_id}", flush=True)
         
-        stripe.api_key = stripe_key
+        # DEFENSIVE CODING: Ensure key is stripped before setting
+        stripe.api_key = stripe_key.strip() if stripe_key else None
         print("DEBUG: Stripe API key set", flush=True)
         
         # 4. CREATE CHECKOUT SESSION
