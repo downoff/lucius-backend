@@ -57,13 +57,21 @@ async def upload_tender(
             country=extracted_data.get("region", "Global")
         )
         
-        # In a real flow, we would trigger calculate_match_score here too.
-        # But for the demo/MVP, the AI/Demo extraction does enough.
-        
         tender_dict = tender_in.model_dump()
         result = await db.tenders.insert_one(tender_dict)
+        new_tender_id = str(result.inserted_id)
+        
+        # [NEW] Index for RAG Chat
+        try:
+            from app.services import rag_service
+            # We index the raw text with the tender ID as metadata
+            await rag_service.add_document(text, meta={"id": new_tender_id, "title": tender_in.title})
+            print(f"[RAG] Indexed tender {new_tender_id}")
+        except Exception as e:
+            print(f"[RAG] Indexing failed (non-fatal): {e}")
+
         new_tender = await db.tenders.find_one({"_id": result.inserted_id})
-        new_tender["_id"] = str(new_tender["_id"])
+        new_tender["_id"] = new_tender_id
         
         return new_tender
 

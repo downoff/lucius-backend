@@ -85,15 +85,19 @@ async def recover_password(email: str, db: AsyncIOMotorDatabase = Depends(deps.g
         expires_delta=timedelta(hours=1)
     )
     
-    # MOCK EMAIL SENDING
-    base_url = "https://lucius-ai.onrender.com"
-    recovery_link = f"{base_url}/login?resetToken={password_reset_token}" # Or separate reset page
-
-    print(f"============================================")
-    print(f"[EMAIL MOCK] Password Recovery for {email}")
-    print(f"Token: {password_reset_token}")
-    print(f"CLICK HERE: {recovery_link}")
-    print(f"============================================")
+    # SEND EMAIL
+    from app.services import email_service
+    base_url = "https://lucius-ai.onrender.com" # Should be frontend URL from env
+    recovery_link = f"{base_url}/reset-password?token={password_reset_token}" 
+    
+    html_content = f"""
+    <p>You requested a password reset for Lucius AI.</p>
+    <p>Click the link below to reset your password:</p>
+    <a href="{recovery_link}">Reset Password</a>
+    <p>If you didn't request this, ignore this email.</p>
+    """
+    
+    await email_service.send_email(email, "Reset Your Password", html_content)
     
     return {"msg": "Password recovery email sent"}
 
@@ -139,16 +143,19 @@ async def request_verification(
         expires_delta=timedelta(hours=24)
     )
     
-    # MOCK EMAIL SENDING
+    # SEND EMAIL
+    from app.services import email_service
     # In production, use settings.FRONTEND_URL or similar
     base_url = "https://lucius-ai.onrender.com" 
     verification_link = f"{base_url}/verify-email?token={token}"
     
-    print(f"============================================")
-    print(f"[EMAIL MOCK] Email Verification for {current_user.email}")
-    print(f"Token: {token}")
-    print(f"CLICK HERE: {verification_link}")
-    print(f"============================================")
+    html_content = f"""
+    <p>Welcome to Lucius AI!</p>
+    <p>Please verify your email address by clicking the link below:</p>
+    <a href="{verification_link}">Verify Email</a>
+    """
+    
+    await email_service.send_email(current_user.email, "Verify your email", html_content)
     
     return {"msg": "Verification email sent"}
 

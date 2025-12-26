@@ -24,8 +24,9 @@ class Settings(BaseSettings):
     # OAuth
     GOOGLE_CLIENT_ID: Optional[str] = None
     
-    # Email (SendGrid)
+    # Email (SendGrid / Resend)
     SENDGRID_API_KEY: Optional[str] = None
+    RESEND_API_KEY: Optional[str] = None
     
     class Config:
         case_sensitive = True

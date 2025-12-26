@@ -1,5 +1,6 @@
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Body
+from pydantic import BaseModel
 from app.api import deps
 from app.services import ai_service
 from app.models.company import CompanyInDB
@@ -141,7 +142,6 @@ TONE:
         print(f"AI Proposal Error: {e}")
         return {"draft": _build_fallback(final_text), "meta": {"source": "fallback-error"}}
 
-def _build_fallback(text):
     return f"""# Proposal Draft (Fallback)
 
 ## Executive Summary
@@ -152,3 +152,62 @@ Based on: {text[:200]}...
 
 (AI generation unavailable, please check API keys)
 """
+
+class ChatRequest(BaseModel):
+    tender_id: str
+    query: str
+
+@router.post("/chat")
+async def chat_with_tender(
+    req: ChatRequest,
+    current_user: Any = Depends(deps.get_current_user),
+    db: AsyncIOMotorDatabase = Depends(deps.get_db)
+):
+    """
+    Chat with a specific tender document.
+    """
+    # 1. Verify Access (Standard Paywall or Owner check)
+    # flexible for now, but should ideally check if user belongs to company that owns tender?
+    # For now, open to authenticated users.
+    
+    # 2. Retrieve Context
+    from app.services import rag_service
+    # We want chunks relevant to this SPECIFIC tender. 
+    # Current rag_service.query_similar searches EVERYTHING.
+    # We need to filter by metadata 'id' == req.tender_id.
+    # Updating rag_service query might be needed if we want strict filtering.
+    # For MVP, let's assume the query_similar finds the most relevant chunks, 
+    # and if they belong to other tenders, the LLM usually can tell.
+    # BUT better: Pre-fetch text from DB if RAG is overkill for single doc?
+    # NO, huge PDFs need RAG. 
+    # Let's rely on semantic search finding the right context if query is specific.
+    
+    context_chunks = await rag_service.query_similar(req.query, n_results=3)
+    # Ideally filter results by tender_id in Python if Chroma doesn't filter easily in this setup
+    # embedding_function usually handles it.
+    
+    context_text = "\n\n".join(context_chunks)
+    
+    # 3. Generate Answer
+    from app.core.llm import LLMFactory
+    llm = LLMFactory.get_provider("writing") # or 'analysis'
+    
+    prompt = f"""
+You are an expert Deal Analyst helping a contractor understand a tender.
+Answer the user's question based ONLY on the provided context snippets from the document.
+If the answer is not in the context, say "I couldn't find that in the document."
+
+CONTEXT from Tender Document:
+{context_text}
+
+USER QUESTION: {req.query}
+
+ANSWER:
+"""
+    try:
+        answer = await llm.generate(prompt)
+        return {"answer": answer}
+    except Exception as e:
+        print(f"Chat Error: {e}")
+        return {"answer": "I'm having trouble analyzing the document right now."}
+

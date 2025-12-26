@@ -18,3 +18,4 @@ dnspython
 anthropic
 chromadb
 pypdf
+resend
