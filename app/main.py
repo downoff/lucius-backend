@@ -18,10 +18,17 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
-# CORS
+# CORS - Specific origins required when allow_credentials=True
+origins = [
+    "https://www.ailucius.com",
+    "https://ailucius.com",
+    "http://localhost:5173",  # For local development
+    "http://localhost:3000"   # Just in case you use this port
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all for debugging/demo
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
