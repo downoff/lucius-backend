@@ -81,6 +81,7 @@ async def generate_draft(
     final_text = tender_text
     if not final_text and tender_id:
         t = await db.tenders.find_one({"_id": ObjectId(tender_id)})
+        if t:
             final_text = f"{t.get('title', '')}\n{t.get('description_raw', '')}"
             
     if not final_text:
