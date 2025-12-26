@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Body, HTTPException
+from fastapi.responses import JSONResponse
 from app.api import deps
 from app.models.user import UserInDB
 from app.services.payment_service import create_checkout_session, create_portal_session
@@ -104,12 +105,18 @@ async def checkout_session(
         
         # 3. CONFIGURE STRIPE
         print("\n--- STRIPE CONFIGURATION ---")
+        
+        # DEBUG: Print variables before Stripe calls
+        print(f"Using Frontend URL: {os.getenv('FRONTEND_URL')}", flush=True)
+        print(f"Stripe Key exists: {bool(os.getenv('STRIPE_SECRET_KEY'))}", flush=True)
+        print(f"Final price_id: {final_price_id}", flush=True)
+        
         stripe.api_key = stripe_key
-        print("DEBUG: Stripe API key set")
+        print("DEBUG: Stripe API key set", flush=True)
         
         # 4. CREATE CHECKOUT SESSION
         print("\n--- CREATING STRIPE SESSION ---")
-        print(f"DEBUG: Calling create_checkout_session with price_id: {final_price_id}")
+        print(f"DEBUG: Calling create_checkout_session with price_id: {final_price_id}", flush=True)
         
         session, cid = await create_checkout_session(company, final_price_id)
         
@@ -130,44 +137,72 @@ async def checkout_session(
         return {"url": session.url}
         
     except stripe.error.AuthenticationError as e:
-        print(f"\n{'=' * 80}")
-        print(f"STRIPE AUTHENTICATION ERROR: {str(e)}")
-        print(f"ERROR TYPE: {type(e).__name__}")
-        print(f"{'=' * 80}")
-        raise HTTPException(status_code=500, detail="Invalid Stripe API Key")
+        error_msg = str(e)
+        print(f"\n{'=' * 80}", flush=True)
+        print(f"PAYMENT CRASH: STRIPE AUTHENTICATION ERROR: {error_msg}", flush=True)
+        print(f"ERROR TYPE: {type(e).__name__}", flush=True)
+        print(f"{'=' * 80}", flush=True)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Invalid Stripe API Key: {error_msg}"}
+        )
         
     except stripe.error.InvalidRequestError as e:
-        print(f"\n{'=' * 80}")
-        print(f"STRIPE INVALID REQUEST ERROR: {str(e)}")
-        print(f"ERROR TYPE: {type(e).__name__}")
-        print(f"ERROR CODE: {getattr(e, 'code', 'N/A')}")
-        print(f"ERROR PARAM: {getattr(e, 'param', 'N/A')}")
-        print(f"{'=' * 80}")
-        error_message = getattr(e, 'user_message', str(e))
-        raise HTTPException(status_code=400, detail=f"Stripe rejected request: {error_message}")
+        error_msg = str(e)
+        error_code = getattr(e, 'code', 'N/A')
+        error_param = getattr(e, 'param', 'N/A')
+        print(f"\n{'=' * 80}", flush=True)
+        print(f"PAYMENT CRASH: STRIPE INVALID REQUEST ERROR: {error_msg}", flush=True)
+        print(f"ERROR TYPE: {type(e).__name__}", flush=True)
+        print(f"ERROR CODE: {error_code}", flush=True)
+        print(f"ERROR PARAM: {error_param}", flush=True)
+        print(f"{'=' * 80}", flush=True)
+        error_message = getattr(e, 'user_message', error_msg)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Stripe rejected request: {error_message}"}
+        )
         
     except stripe.error.StripeError as e:
-        print(f"\n{'=' * 80}")
-        print(f"STRIPE API ERROR: {str(e)}")
-        print(f"ERROR TYPE: {type(e).__name__}")
-        print(f"ERROR CODE: {getattr(e, 'code', 'N/A')}")
-        print(f"{'=' * 80}")
-        error_message = getattr(e, 'user_message', f"Stripe API Error: {str(e)}")
-        raise HTTPException(status_code=400, detail=error_message)
+        error_msg = str(e)
+        error_code = getattr(e, 'code', 'N/A')
+        print(f"\n{'=' * 80}", flush=True)
+        print(f"PAYMENT CRASH: STRIPE API ERROR: {error_msg}", flush=True)
+        print(f"ERROR TYPE: {type(e).__name__}", flush=True)
+        print(f"ERROR CODE: {error_code}", flush=True)
+        print(f"{'=' * 80}", flush=True)
+        error_message = getattr(e, 'user_message', f"Stripe API Error: {error_msg}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": error_message}
+        )
         
     except HTTPException:
-        # Re-raise HTTP exceptions as-is
+        # Re-raise HTTP exceptions as-is (these are intentional errors)
         raise
         
     except Exception as e:
         # This is the most important line - print full stack trace
-        print(f"\n{'=' * 80}")
-        print(f"INTERNAL CRASH: {str(e)}")
-        print(f"ERROR TYPE: {type(e).__name__}")
-        print("\nFULL STACK TRACE:")
-        print(traceback.format_exc())
-        print(f"{'=' * 80}")
-        raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)}")
+        error_msg = str(e)
+        error_type = type(e).__name__
+        stack_trace = traceback.format_exc()
+        
+        print(f"\n{'=' * 80}", flush=True)
+        print(f"PAYMENT CRASH: {error_msg}", flush=True)
+        print(f"ERROR TYPE: {error_type}", flush=True)
+        print("\nFULL STACK TRACE:", flush=True)
+        print(stack_trace, flush=True)
+        print(f"{'=' * 80}", flush=True)
+        
+        # Return JSON response so error is visible in frontend Network tab
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": f"Payment Error: {error_msg}",
+                "error_type": error_type,
+                "stack_trace": stack_trace
+            }
+        )
 
 @router.post("/create-portal-session")
 async def portal_session(
