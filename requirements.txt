@@ -19,3 +19,4 @@ anthropic
 chromadb
 pypdf
 resend
+pysqlite3-binary
