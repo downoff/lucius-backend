@@ -69,7 +69,7 @@ async def register(
             expires_delta=timedelta(hours=24)
         )
         from app.services import email_service
-        base_url = "https://lucius-ai.onrender.com" 
+        base_url = settings.FRONTEND_URL
         verification_link = f"{base_url}/verify-email?token={token}"
         
         html_content = f"""
@@ -107,7 +107,7 @@ async def recover_password(email: str, db: AsyncIOMotorDatabase = Depends(deps.g
     
     # SEND EMAIL
     from app.services import email_service
-    base_url = "https://lucius-ai.onrender.com" # Should be frontend URL from env
+    base_url = settings.FRONTEND_URL
     recovery_link = f"{base_url}/reset-password?token={password_reset_token}" 
     
     html_content = f"""
@@ -165,8 +165,8 @@ async def request_verification(
     
     # SEND EMAIL
     from app.services import email_service
-    # In production, use settings.FRONTEND_URL or similar
-    base_url = "https://lucius-ai.onrender.com" 
+    # In production, use settings.FRONTEND_URL
+    base_url = settings.FRONTEND_URL
     verification_link = f"{base_url}/verify-email?token={token}"
     
     html_content = f"""

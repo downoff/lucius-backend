@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # OAuth
     GOOGLE_CLIENT_ID: Optional[str] = None
     
+    # Frontend URL (For emails)
+    FRONTEND_URL: str = "https://www.ailucius.com"
+    
     # Email (SendGrid / Resend)
     SENDGRID_API_KEY: Optional[str] = None
     RESEND_API_KEY: Optional[str] = None
